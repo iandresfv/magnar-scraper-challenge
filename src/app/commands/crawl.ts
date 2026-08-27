@@ -24,13 +24,16 @@ import { newPartitionNode } from '../../core/engine/partitionTree.js';
 import { Pipeline } from '../../core/engine/pipeline.js';
 import { SearchHandler } from '../../core/engine/handlers/search.js';
 import { DetailHandler } from '../../core/engine/handlers/detail.js';
+import { BlobHandler } from '../../core/engine/handlers/blob.js';
 import { RetryPolicy } from '../../core/engine/retryPolicy.js';
 import type { JobQueue } from '../../core/ports/jobQueue.js';
 import type { Repos } from '../../core/ports/repos.js';
 import type { SqlExecutor } from '../../core/ports/sql.js';
 import type { HttpPort } from '../../core/ports/http.js';
+import type { BlobStore } from '../../core/ports/blobStore.js';
 import type { SiteAdapter, SiteSession } from '../../core/ports/siteAdapter.js';
 import { SiteChangedError } from '../../core/ports/siteAdapter.js';
+import { validatePdf } from '../../infra/blob/pdfValidate.js';
 import type { Config } from '../config.js';
 
 export interface CrawlDeps {
@@ -40,6 +43,8 @@ export interface CrawlDeps {
   db: SqlExecutor;
   repos: Repos;
   queue: JobQueue;
+  /** Absent in a planner-only process, which never downloads anything. */
+  store?: BlobStore;
   now?: () => Date;
   log?: (line: string) => void;
   /** Overrides the wall clock in tests so a progress interval does not slow a suite down. */
@@ -118,7 +123,20 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
   };
 
   const gaps: { node: PartitionNode; evidence: GapEvidence }[] = [];
-  let blobsQueued = 0;
+
+  /**
+   * The run's PDF budget, held as remaining capacity rather than as a running total.
+   *
+   * Each detail job reserves what it needs and the rest of the run sees the reduced figure, so
+   * `--pdf-budget 12` means twelve PDFs for the run and not twelve per case.
+   */
+  let blobBudgetLeft = config.crawl.pdfBudget;
+  const reserveBlobs = (requested: number): number => {
+    if (blobBudgetLeft === null) return requested;
+    const granted = Math.max(0, Math.min(requested, blobBudgetLeft));
+    blobBudgetLeft -= granted;
+    return granted;
+  };
 
   const pipeline = new Pipeline({
     classify: (subject) => adapter.classify?.(subject) ?? null,
@@ -155,12 +173,26 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
         renewSession,
         now,
         classify: (subject) => adapter.classify?.(subject as never) ?? null,
-        blobBudget: () =>
-          config.crawl.pdfBudget === null
-            ? null
-            : Math.max(0, config.crawl.pdfBudget - blobsQueued),
+        reserveBlobs,
       }),
     );
+
+  if (deps.store !== undefined) {
+    pipeline.register(
+      new BlobHandler({
+        adapter,
+        http,
+        store: deps.store,
+        blobs: repos.blobs,
+        cases: repos.cases,
+        session: getSession,
+        renewSession,
+        validate: validatePdf,
+        classify: (subject) => adapter.classify?.(subject as never) ?? null,
+        now,
+      }),
+    );
+  }
 
   // ── planner: seed the root, then keep leases honest ───────────────────────
   if (config.role === 'planner' || config.role === 'all') {
@@ -224,7 +256,6 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
 
       const outcome = await pipeline.run(job);
       jobsRun++;
-      if (job.kind === 'blob') blobsQueued++;
 
       if (outcome.kind === 'done') {
         await queue.complete(job.id);

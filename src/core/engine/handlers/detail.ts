@@ -43,8 +43,17 @@ export interface DetailHandlerDeps {
   /** Replaces the session after it is judged dead. */
   renewSession: () => Promise<SiteSession>;
   now: () => Date;
-  /** How many blob jobs may still be enqueued. `null` means no limit. */
-  blobBudget?: () => number | null;
+  /**
+   * Reserves part of the run's PDF budget.
+   *
+   * A *reservation*, not a query: the caller asks for `n` and is told how many it may have, and
+   * the budget is decremented by that amount. Asking "how much is left?" and then slicing would
+   * let every detail job in the run believe the whole budget was its own — which is exactly the
+   * bug this signature exists to prevent, found by asking for twelve PDFs and receiving 386.
+   *
+   * Returns `n` unchanged when there is no budget.
+   */
+  reserveBlobs?: (requested: number) => number;
   classify: (subject: unknown) => string | null;
 }
 
@@ -84,8 +93,8 @@ export class DetailHandler implements JobHandler {
     }
 
     const blobs = this.deps.adapter.documentsOf(record);
-    const budget = this.deps.blobBudget?.() ?? null;
-    const admitted = budget === null ? blobs : blobs.slice(0, Math.max(0, budget));
+    const allowed = this.deps.reserveBlobs?.(blobs.length) ?? blobs.length;
+    const admitted = blobs.slice(0, Math.max(0, allowed));
 
     await this.deps.db.transaction(async (tx) => {
       await this.deps.cases.upsertDetailed(record, tx);

@@ -19,6 +19,7 @@ import { createRepos } from '../infra/db/repos/index.js';
 import { PgJobQueue } from '../infra/db/pgJobQueue.js';
 import type { JobKind } from '../core/ports/jobQueue.js';
 import { FetchHttpClient } from '../infra/http/fetchHttpClient.js';
+import { createBlobStore } from '../infra/blob/factory.js';
 import { crawlCommand } from './commands/crawl.js';
 import { dlqListCommand, retryDlqCommand } from './commands/dlq.js';
 import { ConfigError, resolveConfig, type Config } from './config.js';
@@ -92,7 +93,21 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 
     switch (config.command) {
       case 'crawl': {
+        const blob = await createBlobStore({
+          driver: config.blob.driver,
+          dir: config.blob.dir,
+          endpoint: config.blob.endpoint,
+          bucket: config.blob.bucket,
+          region: config.blob.region,
+          accessKeyId: config.blob.accessKeyId,
+          secretAccessKey: config.blob.secretAccessKey,
+          forcePathStyle: config.blob.forcePathStyle,
+        });
+        if (blob.fallbackNotice !== null) write(blob.fallbackNotice);
+        await blob.store.init();
+
         const result = await crawlCommand({
+          store: blob.store,
           config,
           adapter,
           http,

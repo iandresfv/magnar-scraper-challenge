@@ -278,7 +278,7 @@ describe('the detail handler', () => {
       renewSession: () => Promise.resolve(session),
       now: () => NOW,
       classify: (subject) => adapter.classify?.(subject as never) ?? null,
-      blobBudget: () => 1,
+      reserveBlobs: () => 1,
     });
     const local = new Pipeline().register(budgeted);
 
