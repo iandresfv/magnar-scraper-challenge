@@ -5,3 +5,5 @@ data/
 exports/
 context/
 src/sites/*/fixtures/
+# Copia literal de la guía de lectura: reformatearla la haría dejar de serlo.
+docs/GUIDE.md

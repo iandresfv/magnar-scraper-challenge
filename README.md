@@ -6,6 +6,9 @@ Motor de scraping judicial multi-sitio en TypeScript. El primer sitio implementa
 Pública del PJe del **TRF5** (`pjett.trf5.jus.br`), que no pagina y corta en 30 resultados por
 consulta: aquí la completitud no se pagina, **se construye**.
 
+> Si va a leer el código, empiece por [`docs/GUIDE.md`](docs/GUIDE.md): explica los hallazgos
+> sobre el sitio, la estrategia y cómo comprobarla, en 15–20 minutos de lectura.
+
 ---
 
 ## 1. Qué es, y cómo se ejecuta en 30 segundos
@@ -390,6 +393,8 @@ La regla la vigilan ESLint **y** un test que recorre el grafo de imports transit
 Un tribunal es un `SiteAdapter` + sus `Axis` + sus canarios, registrado en el `SiteRegistry`. Hay
 dos adaptadores vivos —`br-trf5` y `fake-pje`— y **una** suite de contrato que ambos pasan.
 
+- Recorrido guiado de la solución, pensado para leerse antes que el código:
+  [`docs/GUIDE.md`](docs/GUIDE.md)
 - Mapa de capas y algoritmo: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Decisiones, con alternativas descartadas y fecha: [`docs/ADR/`](docs/ADR/)
 - Guía para añadir un tribunal nuevo: [`docs/adding-a-site.md`](docs/adding-a-site.md)
