@@ -16,6 +16,7 @@
  */
 import type { FailureClass } from '../domain/types.js';
 import type { Job, JobKind } from '../ports/jobQueue.js';
+import { classifyFailure, type SiteClassifier } from './failureClassifier.js';
 
 export type HandlerOutcome =
   | { kind: 'done'; detail?: string }
@@ -73,8 +74,25 @@ export class FatalSiteChange extends Error {
   }
 }
 
+export interface PipelineOptions {
+  /**
+   * The site's own classifier, consulted for exceptions the handlers let escape.
+   *
+   * Without it every unexpected error would be treated the same way, and the retry matrix is
+   * only as good as the classification feeding it: a 429 that surfaces as an exception and gets
+   * filed under `PARSE` is retried once instead of six times, which is the difference between
+   * riding out a rate limit and giving up on the first one.
+   */
+  classify?: SiteClassifier;
+}
+
 export class Pipeline {
   private readonly handlers = new Map<JobKind, JobHandler>();
+  private readonly classify: SiteClassifier | undefined;
+
+  constructor(options: PipelineOptions = {}) {
+    this.classify = options.classify;
+  }
 
   register(handler: JobHandler): this {
     this.handlers.set(handler.kind, handler);
@@ -104,12 +122,16 @@ export class Pipeline {
       if (error instanceof FatalSiteChange) {
         return Outcome.fatal(error.canaryId, error.message);
       }
-      // Unknown exceptions are retried once or twice rather than buried immediately: a transient
-      // parse failure on a partial response is far more common than a permanently broken page.
-      return Outcome.retry(
-        'PARSE',
-        error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      );
+
+      // An exception still has a class. Classifying it — rather than filing everything under
+      // `PARSE` — is what lets a rate limit that surfaced as a thrown error get the six patient
+      // attempts its row in the matrix promises, instead of the single attempt a parse failure
+      // deserves.
+      const failureClass = classifyFailure({ error }, this.classify);
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      return failureClass === 'FATAL_SITE_CHANGED'
+        ? Outcome.fatal('unknown', message)
+        : Outcome.retry(failureClass, message);
     }
   }
 }

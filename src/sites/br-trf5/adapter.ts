@@ -82,10 +82,17 @@ export class Trf5Adapter implements SiteAdapter {
     const jar = http.newJar();
     const response = await http.send({ method: 'GET', url: this.urls.listView }, jar);
     if (response.status !== 200) {
-      throw new SiteChangedError(
-        'C-3',
+      // A refusal is not a redesign. A 429, a 5xx or a dropped connection during bootstrap is
+      // exactly the kind of thing the retry policy exists for, and calling it a site change
+      // would stop the whole run over a server having a bad minute. Only a 200 that does not
+      // contain the form is evidence the page itself changed — and that is decided below.
+      throw new DetailFetchError(
         `the search page answered ${String(response.status)} instead of 200`,
-        { status: response.status },
+        response.status === 429
+          ? 'RATE_LIMITED'
+          : response.status >= 500
+            ? 'SERVER_ERROR'
+            : 'CLIENT_ERROR',
       );
     }
     // Every canary the page can raise fires inside here.

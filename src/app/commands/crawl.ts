@@ -24,6 +24,7 @@ import { newPartitionNode } from '../../core/engine/partitionTree.js';
 import { Pipeline } from '../../core/engine/pipeline.js';
 import { SearchHandler } from '../../core/engine/handlers/search.js';
 import { DetailHandler } from '../../core/engine/handlers/detail.js';
+import { RetryPolicy } from '../../core/engine/retryPolicy.js';
 import type { JobQueue } from '../../core/ports/jobQueue.js';
 import type { Repos } from '../../core/ports/repos.js';
 import type { SqlExecutor } from '../../core/ports/sql.js';
@@ -119,7 +120,9 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
   const gaps: { node: PartitionNode; evidence: GapEvidence }[] = [];
   let blobsQueued = 0;
 
-  const pipeline = new Pipeline()
+  const pipeline = new Pipeline({
+    classify: (subject) => adapter.classify?.(subject) ?? null,
+  })
     .register(
       new SearchHandler({
         adapter,
@@ -191,6 +194,10 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
   if (config.role === 'worker' || config.role === 'all') {
     const progressEvery = deps.progressEveryMs ?? 30_000;
     let lastProgress = Date.now();
+    const retryPolicy = new RetryPolicy();
+    /** The previous delay per job, so the decorrelated sequence grows instead of restarting. */
+    const previousDelay = new Map<string, number>();
+    const startedAt = new Map<string, number>();
 
     for (;;) {
       if (deps.signal?.aborted === true) {
@@ -205,14 +212,14 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
 
       const job = await queue.lease(site, config.crawl.workerId, config.crawl.leaseMs);
       if (job === null) {
-        // The planner may still be splitting partitions; only give up once nothing is left.
+        // Nothing claimable *right now* is not the same as nothing left to do: a job whose
+        // retry is scheduled a few seconds out is still pending. Giving up here would end a run
+        // over a single transient failure, which is exactly what a retry policy exists to
+        // prevent. So the loop waits while work remains, in either role.
         const remaining = await queue.stats(site);
         if (remaining.pending === 0 && remaining.leased === 0) break;
-        if (config.role === 'worker') {
-          await sleep(config.crawl.idlePollMs, deps.signal);
-          continue;
-        }
-        break;
+        await sleep(config.crawl.idlePollMs, deps.signal);
+        continue;
       }
 
       const outcome = await pipeline.run(job);
@@ -222,16 +229,38 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
       if (outcome.kind === 'done') {
         await queue.complete(job.id);
       } else if (outcome.kind === 'retry') {
-        // The delay is a placeholder until the retry policy lands in the next phase; the
-        // decision of *whether* to retry is already the handler's, and the queue already knows
-        // when to give up.
-        const result = await queue.retry(job.id, 1_000, {
+        // Three separate decisions, none of them in the handler: the handler said *what kind* of
+        // failure it was, the matrix says how long to wait, and the queue says when the attempts
+        // are spent. Keeping them apart is what makes each one testable without the others.
+        const firstSeen = startedAt.get(job.key) ?? Date.now();
+        startedAt.set(job.key, firstSeen);
+        const decision = retryPolicy.decide({
           failureClass: outcome.failureClass,
-          error: outcome.error,
-          httpStatus: outcome.httpStatus ?? null,
+          attempt: job.attempts,
+          previousDelayMs: previousDelay.get(job.key) ?? 0,
+          elapsedMs: Date.now() - firstSeen,
         });
-        if (result === 'dead')
-          log(`job ${job.key} exhausted its attempts (${outcome.failureClass})`);
+
+        if (decision.retry) {
+          previousDelay.set(job.key, decision.delayMs);
+          const result = await queue.retry(job.id, decision.delayMs, {
+            failureClass: outcome.failureClass,
+            error: outcome.error,
+            httpStatus: outcome.httpStatus ?? null,
+          });
+          if (result === 'dead') {
+            log(`job ${job.key} exhausted its attempts (${outcome.failureClass})`);
+          }
+        } else {
+          // The matrix says this class is not worth another attempt, or the item has used its
+          // time budget. Either way it goes to the dead letter queue with the reason attached.
+          await queue.dead(job.id, {
+            failureClass: outcome.failureClass,
+            error: `${outcome.error} — ${decision.reason}`,
+            httpStatus: outcome.httpStatus ?? null,
+          });
+          log(`job ${job.key} given up on: ${decision.reason}`);
+        }
       } else if (outcome.kind === 'dead') {
         await queue.dead(job.id, {
           failureClass: outcome.failureClass,
@@ -270,8 +299,13 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
     canary,
   };
 
-  // A run that stopped early is left unfinished on purpose, so the next start resumes it.
-  const finished = exitCode !== ExitCode.INTERRUPTED && config.crawl.maxJobs === null;
+  // A run that stopped early is left unfinished on purpose, so the next start resumes it rather
+  // than opening a second run over the same root. A tripped canary counts as stopping early:
+  // the tree is half-built and the whole point is to come back to it once the site is understood.
+  const finished =
+    exitCode !== ExitCode.INTERRUPTED &&
+    exitCode !== ExitCode.CANARY_FATAL &&
+    config.crawl.maxJobs === null;
   if (finished) await repos.runs.finish(runId, { exitCode, summary });
 
   log(await progressLine(site, repos, queue));
