@@ -26,6 +26,7 @@ import { crawlCommand } from './commands/crawl.js';
 import { dlqListCommand, retryDlqCommand } from './commands/dlq.js';
 import { verifyCommand } from './commands/verify.js';
 import { reportCommand } from './commands/report.js';
+import { exportCommand, type ExportFormat } from './commands/export.js';
 import { ConfigError, resolveConfig, type Config } from './config.js';
 import { createSite } from './registry.js';
 import { resolveVersion } from './version.js';
@@ -171,6 +172,25 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           write,
         });
       }
+      case 'export': {
+        const format = flagValue(argv, '--format') ?? 'jsonl';
+        if (format !== 'jsonl' && format !== 'csv') {
+          process.stderr.write(`unknown --format "${format}"; expected jsonl or csv\n`);
+          return ExitCode.SANITY_FAILED;
+        }
+        const out = flagValue(argv, '--out');
+        const only = flagValue(argv, '--only');
+        const result = await exportCommand({
+          db: executor,
+          site: config.site,
+          format: format satisfies ExportFormat,
+          anonymize: argv.includes('--anonymize'),
+          ...(out === undefined ? {} : { outDir: out }),
+          ...(only === undefined ? {} : { only: only.split(',').map((name) => name.trim()) }),
+          write,
+        });
+        return result.exitCode;
+      }
       case 'retry-dlq': {
         return retryDlqCommand(queue, {
           site: config.site,
@@ -180,7 +200,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       }
       default: {
         process.stderr.write(
-          `unknown command "${config.command}". Known commands: crawl, dlq:list, retry-dlq, verify, report\n`,
+          `unknown command "${config.command}". Known commands: crawl, dlq:list, retry-dlq, verify, report, export\n`,
         );
         return ExitCode.SANITY_FAILED;
       }
@@ -218,6 +238,7 @@ function usage(): string {
     '  dlq:list     list the jobs that exhausted their retries',
     '  verify       run the sanity checks over the last run; exits 4 if any fail',
     '  report       write reports/coverage.md, coverage.json, metrics.json and sample.md',
+    '  export       write one jsonl or csv file per entity into exports/',
     '  retry-dlq    move dead jobs back to pending so the next crawl reprocesses them',
     '  version      print the version and exit',
     '',
@@ -232,7 +253,10 @@ function usage(): string {
     '  --kind <k>             narrow dlq:list / retry-dlq to search|detail|blob',
     '  --sample <n>           verify: re-query n leaves against the live site',
     '                         report: how many cases to render in sample.md (default: 10)',
-    '  --out <dir>            report: where to write the files (default: reports)',
+    '  --out <dir>            report/export: where to write (default: reports / exports)',
+    '  --format jsonl|csv     export: output format (default: jsonl)',
+    '  --only <a,b>           export: only these entities (default: all)',
+    '  --anonymize            export: mask CPF/CNPJ digits in the output',
     '  --no-anonymize         report: leave CPF/CNPJ unmasked; do not commit the result',
     '',
     'Configuration also reads the environment; see .env.example.',
