@@ -428,7 +428,11 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
   // A run that stopped early is left unfinished on purpose, so the next start resumes it rather
   // than opening a second run over the same root. A tripped canary counts as stopping early:
   // the tree is half-built and the whole point is to come back to it once the site is understood.
+  // A planner has not finished anything: it seeded the root and left. Marking the run finished
+  // here would make every worker that starts next open a *second* run over the same root, and the
+  // partition tree would be split across two of them.
   const finished =
+    config.role !== 'planner' &&
     exitCode !== ExitCode.INTERRUPTED &&
     exitCode !== ExitCode.CANARY_FATAL &&
     exitCode !== ExitCode.BREAKER_ABORTED &&
