@@ -8,6 +8,7 @@
  */
 import type { SiteAdapter } from '../core/ports/siteAdapter.js';
 import { createTrf5Adapter } from '../sites/br-trf5/adapter.js';
+import { createFakePjeAdapter } from '../sites/fake-pje/adapter.js';
 
 export interface SiteFactoryOptions {
   /** Overridden by the tests and by the fake server; production uses the descriptor's own. */
@@ -17,7 +18,23 @@ export interface SiteFactoryOptions {
 
 export type SiteFactory = (options?: SiteFactoryOptions) => SiteAdapter;
 
-const REGISTRY = new Map<string, SiteFactory>([['br-trf5', (o) => createTrf5Adapter(o ?? {})]]);
+const REGISTRY = new Map<string, SiteFactory>([
+  ['br-trf5', (o) => createTrf5Adapter(o ?? {})],
+  // The test double is a first-class site, not a mock bolted on beside one. Registering it here
+  // is what makes `test/contract/siteAdapter.contract.ts` run against two real implementations.
+  [
+    'fake-pje',
+    (o) => {
+      const baseUrl = o?.baseUrl;
+      if (baseUrl === undefined) {
+        throw new Error(
+          'the fake-pje site needs a baseUrl: start the fake server and pass its url',
+        );
+      }
+      return createFakePjeAdapter({ baseUrl, ...(o?.now === undefined ? {} : { now: o.now }) });
+    },
+  ],
+]);
 
 export function registerSite(id: string, factory: SiteFactory): void {
   REGISTRY.set(id, factory);
