@@ -131,6 +131,18 @@ function buildResponse(req: HttpRequest, stub: StubbedResponse): HttpResponse {
   };
 }
 
+/**
+ * The empty result, captured from the live site during the phase-0 spike: 4 846 bytes, the grid
+ * re-rendered, and `<span class="text-muted">resultados encontrados</span>` with no count.
+ */
+const EMPTY_SEARCH_RESPONSE = `<?xml version="1.0" encoding="UTF-8"?><html><head>
+<meta name="Ajax-Response" content="true"/>
+<meta name="Ajax-Update-Ids" content="fPP:processosGridPanel"/>
+</head><body><div id="fPP:processosGridPanel">
+<table id="fPP:processosTable"><tbody></tbody>
+<tfoot><tr><td><div><div><span class="text-muted">resultados encontrados</span></div></div></td></tr></tfoot>
+</table></div></body></html>`;
+
 /** The routes that make the adapter behave as it does against the live site. */
 export function trf5FixtureRoutes(): FixtureHttpOptions['routes'] {
   return [
@@ -142,6 +154,17 @@ export function trf5FixtureRoutes(): FixtureHttpOptions['routes'] {
           'content-type': 'text/html;charset=ISO-8859-1',
           'set-cookie': 'JSESSIONID=fixture.tt-consulta-229; Path=/pjeconsulta',
         },
+      }),
+    },
+    {
+      // A range with no data. The real site answers with the grid re-rendered and a footer that
+      // carries no number at all — the marker is an absence, not a message — so the fixture
+      // transport has to model that rather than always replaying the populated page.
+      match: (req) =>
+        req.method === 'POST' && Buffer.from(req.body ?? new Uint8Array()).includes('1901'),
+      respond: () => ({
+        body: new Uint8Array(Buffer.from(EMPTY_SEARCH_RESPONSE, 'utf8')),
+        headers: { 'content-type': 'text/xml;charset=UTF-8' },
       }),
     },
     {
