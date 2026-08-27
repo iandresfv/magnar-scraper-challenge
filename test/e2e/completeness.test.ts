@@ -13,7 +13,7 @@
  * It runs against both drivers, because "the fallback is a real Postgres" is a claim that should
  * cost something to make.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SqlExecutor } from '../../src/core/ports/sql.js';
 import { PgliteExecutor } from '../../src/infra/db/pgliteExecutor.js';
 import { PgExecutor } from '../../src/infra/db/pgExecutor.js';
@@ -40,8 +40,11 @@ interface Subject {
   cleanup?: () => Promise<void>;
 }
 
+/** A full crawl is hundreds of round trips; a CI runner needs more than a unit test's budget. */
+const E2E_TIMEOUT = 300_000;
+
 function runCompletenessSuite(subject: Subject): void {
-  describe(`completeness: ${subject.name}`, () => {
+  describe(`completeness: ${subject.name}`, { timeout: E2E_TIMEOUT }, () => {
     let fake: FakePjeServer;
     let db: SqlExecutor;
 
@@ -59,7 +62,8 @@ function runCompletenessSuite(subject: Subject): void {
       await subject.cleanup?.();
     });
 
-    beforeEach(async () => {
+    /** Wipes everything the crawl writes, for a test that needs to start from nothing. */
+    async function reset(): Promise<void> {
       for (const table of [
         'job',
         'blob',
@@ -76,7 +80,7 @@ function runCompletenessSuite(subject: Subject): void {
       ]) {
         await db.query(`DELETE FROM juris.${table}`);
       }
-    });
+    }
 
     /** Wires the real command against the fake site. Nothing here is a test double but the site. */
     async function crawl(
@@ -127,8 +131,22 @@ function runCompletenessSuite(subject: Subject): void {
       return Math.max(0, onGapDay - fake.dataset.cap);
     }
 
+    /**
+     * One crawl, many questions.
+     *
+     * Each of these assertions is about the same finished run, so running the crawl once and
+     * interrogating it is both faster and more honest than crawling nine times and hoping every
+     * run behaved identically. The tests that genuinely need a fresh start do their own.
+     */
+    let shared: Awaited<ReturnType<typeof crawlCommand>>;
+
+    beforeAll(async () => {
+      await reset();
+      shared = await crawl();
+    }, 300_000);
+
     it('finds every case the site can show, and says so exactly', async () => {
-      const result = await crawl();
+      const result = shared;
       const repos = createRepos(db);
 
       const counts = await repos.cases.countByState(SITE);
@@ -144,7 +162,7 @@ function runCompletenessSuite(subject: Subject): void {
     });
 
     it('tiles the root exactly, with no gap and no overlap', async () => {
-      const result = await crawl();
+      const result = shared;
       const repos = createRepos(db);
       const leaves = await repos.partitions.primaryLeaves(result.runId);
       const tiling = assertTiling(leaves, ROOT);
@@ -154,7 +172,6 @@ function runCompletenessSuite(subject: Subject): void {
 
     it('never overlaps two resolved leaves — enforced by the database, not only by the code', async () => {
       // The EXCLUDE constraint would have refused the insert; this asserts it was active.
-      await crawl();
       const { rows } = await db.query<{ n: string | number }>(
         `SELECT count(*) AS n FROM juris.partition a JOIN juris.partition b
            ON a.site = b.site AND a.id < b.id
@@ -166,7 +183,7 @@ function runCompletenessSuite(subject: Subject): void {
     });
 
     it('declares a GAP only where one was designed, with the arithmetic to justify it', async () => {
-      const result = await crawl();
+      const result = shared;
       const repos = createRepos(db);
       const gaps = await repos.reports.gapPartitions(result.runId);
 
@@ -187,8 +204,17 @@ function runCompletenessSuite(subject: Subject): void {
       expect(result.gaps.length).toBeGreaterThan(0);
     });
 
+    it('leaves the observed row counts and the stored cases in agreement', async () => {
+      const result = shared;
+      const repos = createRepos(db);
+      const { observed, unique } = await repos.reports.observedRowsVsUnique(result.runId);
+      // Observed can exceed unique — a truncated parent's thirty rows are seen again by its
+      // children — but it can never be *less*, which would mean rows appeared from nowhere.
+      expect(observed).toBeGreaterThanOrEqual(unique);
+      expect(unique).toBeGreaterThan(0);
+    });
+
     it('deduplicates across overlapping queries: every case appears once', async () => {
-      await crawl();
       const { rows } = await db.query<{ total: string | number; distinct: string | number }>(
         `SELECT count(*) AS total, count(DISTINCT id_origem) AS distinct FROM juris.case_record`,
       );
@@ -196,7 +222,6 @@ function runCompletenessSuite(subject: Subject): void {
     });
 
     it('is idempotent: a second crawl of the same root writes nothing new', async () => {
-      await crawl();
       const repos = createRepos(db);
       const before = await repos.cases.countByState(SITE);
       const requestsBefore = fake.counts['search'] ?? 0;
@@ -210,8 +235,11 @@ function runCompletenessSuite(subject: Subject): void {
       expect((fake.counts['search'] ?? 0) - requestsBefore).toBeLessThan(5);
     });
 
+    // From here on the tests wipe the database and crawl again, so anything that questions the
+    // shared run has to come before them.
     it('resumes after being stopped part-way, and reaches the same answer', async () => {
       // Stop after a handful of jobs, as an interrupted operator or a crashed container would.
+      await reset();
       const partial = await crawl({ maxJobs: 8 });
       expect(partial.jobsRun).toBe(8);
       const repos = createRepos(db);
@@ -230,7 +258,6 @@ function runCompletenessSuite(subject: Subject): void {
     });
 
     it('stores every case with a valid, unique case number', async () => {
-      await crawl();
       const { rows } = await db.query<{ bad: string | number; dupes: string | number }>(
         `SELECT
            count(*) FILTER (WHERE numero !~ '^[0-9]{7}-[0-9]{2}\\.[0-9]{4}\\.[0-9]\\.[0-9]{2}\\.[0-9]{4}$') AS bad,
@@ -239,16 +266,6 @@ function runCompletenessSuite(subject: Subject): void {
       );
       expect(Number(rows[0]?.bad)).toBe(0);
       expect(Number(rows[0]?.dupes)).toBe(0);
-    });
-
-    it('leaves the observed row counts and the stored cases in agreement', async () => {
-      const result = await crawl();
-      const repos = createRepos(db);
-      const { observed, unique } = await repos.reports.observedRowsVsUnique(result.runId);
-      // Observed can exceed unique — a truncated parent's thirty rows are seen again by its
-      // children — but it can never be *less*, which would mean rows appeared from nowhere.
-      expect(observed).toBeGreaterThanOrEqual(unique);
-      expect(unique).toBeGreaterThan(0);
     });
   });
 }
