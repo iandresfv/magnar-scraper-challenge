@@ -130,6 +130,10 @@ export interface ListedCase {
   ultimaMovimentacao: { descricao: string; dataHora: IsoDateTime } | null;
   /** Which partition leaf listed it. Lets the detail job re-run that search to refresh `ca`. */
   partitionId: string;
+  /** The leaf's date range, which is the only thing the listing knows about autuação. */
+  partitionRange: DateRange;
+  /** Hash of what a listing can know, so re-listing an unchanged row writes nothing. */
+  contentHash: string;
   listedAt: IsoDateTime;
 }
 

@@ -9,14 +9,14 @@ import { afterAll, describe, it } from 'vitest';
 import { PgExecutor } from '../../src/infra/db/pgExecutor.js';
 import { PgliteExecutor } from '../../src/infra/db/pgliteExecutor.js';
 import { acquireTestDatabase } from '../support/pgDatabase.js';
-import { runMigratorContract } from './migrator.contract.js';
+import { runReposContract } from './repos.contract.js';
 
-runMigratorContract({ name: 'pglite (in-memory)', create: () => PgliteExecutor.create() });
+runReposContract({ name: 'pglite (in-memory)', create: () => PgliteExecutor.create() });
 
-const database = await acquireTestDatabase('migrator');
+const database = await acquireTestDatabase('repos');
 
 if (database !== null) {
-  runMigratorContract({
+  runReposContract({
     name: 'pg (server)',
     create: () => Promise.resolve(new PgExecutor({ connectionString: database.url })),
   });
@@ -24,7 +24,7 @@ if (database !== null) {
     await database.drop();
   });
 } else {
-  describe('migrations: pg (server)', () => {
+  describe('repositories: pg (server)', () => {
     it.skip('skipped: TEST_DATABASE_URL is unset or the server did not answer — run "npm run up:infra"', () =>
       undefined);
   });
