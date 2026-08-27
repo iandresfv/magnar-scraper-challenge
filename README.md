@@ -292,10 +292,11 @@ Cada archivo se valida **antes** de subirse: cabecera `%PDF-`, marca `%%EOF`, ta
 HTML de sesión caída no se almacena como si fuera un documento; se clasifica `NOT_PDF`, se renueva
 la sesión y se reintenta una vez.
 
-`--pdf-budget` es **por corrida** y se reserva, no se lee: cada job de detalle pide su parte del
-presupuesto y recibe lo que queda, así que `--pdf-budget 12` descarga 12 y no 386. Subir el
-presupuesto en una corrida reanudada vuelve a encolar los `PENDING` hasta el nuevo tope, que es lo
-que hace útil `--pdf-budget all`.
+`--pdf-budget` es **por ejecución del proceso** y se reserva, no se lee: cada job de detalle pide
+su parte del presupuesto y recibe lo que queda, así que `--pdf-budget 12` descarga 12 y no 386.
+Reanudar una corrida vuelve a encolar los `PENDING` y concede otro presupuesto completo: tres
+ejecuciones con `--pdf-budget 150` sobre la misma corrida bajan 450 documentos, no 150. Es lo que
+hace útil `--pdf-budget all` para terminar lo que quedó pendiente.
 
 Más contexto: [ADR 0002](docs/ADR/0002-s3-api-rustfs.md).
 
