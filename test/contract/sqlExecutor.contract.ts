@@ -99,7 +99,9 @@ export function runSqlExecutorContract(subject: ExecutorUnderTest): void {
     });
 
     it('supports btree_gist, which the partition tiling constraint depends on', async () => {
-      await db.query('CREATE EXTENSION IF NOT EXISTS btree_gist');
+      // The extension is installed by test/globalSetup.ts (pg) or by the driver itself
+      // (pglite loads it as a module), never here: `CREATE EXTENSION IF NOT EXISTS` races
+      // against a parallel test file on a clean database.
       const excl = `${table}_excl`;
       await db.query(`DROP TABLE IF EXISTS ${excl}`);
       await db.query(

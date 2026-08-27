@@ -84,6 +84,10 @@ export class PgliteExecutor implements SqlExecutor {
         [PG_OID_INT8]: (value: string) => value,
       },
     });
+    // The contrib module above only makes the extension *available*; it still has to be
+    // created. PGlite is a single connection, so there is no race here — unlike on a server,
+    // where `CREATE EXTENSION IF NOT EXISTS` is not concurrency-safe and is done once up front.
+    await db.exec('CREATE EXTENSION IF NOT EXISTS btree_gist');
     return new PgliteExecutor(db, options.dataDir ?? 'memory://');
   }
 

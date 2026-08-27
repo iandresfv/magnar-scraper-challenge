@@ -9,5 +9,8 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
     reporters: 'default',
+    // Creates btree_gist once against a real Postgres, before any file runs. See the file for
+    // why `CREATE EXTENSION IF NOT EXISTS` cannot be left to the individual suites.
+    globalSetup: ['test/globalSetup.ts'],
   },
 });
