@@ -64,6 +64,11 @@ class PgSession implements SqlSession {
     const res = await this.client.query<T>(text, params as unknown[]);
     return { rows: res.rows, rowCount: res.rowCount };
   }
+
+  async execScript(sql: string): Promise<void> {
+    // No parameters means `pg` uses the simple query protocol, which accepts a whole file.
+    await this.client.query(sql);
+  }
 }
 
 export class PgExecutor implements SqlExecutor {
@@ -92,6 +97,10 @@ export class PgExecutor implements SqlExecutor {
   ): Promise<SqlResult<T>> {
     const res = await this.pool.query<T>(text, params as unknown[]);
     return { rows: res.rows, rowCount: res.rowCount };
+  }
+
+  async execScript(sql: string): Promise<void> {
+    await this.pool.query(sql);
   }
 
   async transaction<T>(fn: (tx: SqlSession) => Promise<T>): Promise<T> {

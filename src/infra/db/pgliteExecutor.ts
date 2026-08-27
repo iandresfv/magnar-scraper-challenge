@@ -34,6 +34,7 @@ export interface PgliteExecutorOptions {
 
 interface PgliteQueryTarget {
   query<T>(text: string, params?: unknown[]): Promise<{ rows: T[]; affectedRows?: number }>;
+  exec(sql: string): Promise<unknown>;
 }
 
 class PgliteSession implements SqlSession {
@@ -45,6 +46,12 @@ class PgliteSession implements SqlSession {
   ): Promise<SqlResult<T>> {
     const res = await this.target.query<T>(text, params as unknown[]);
     return { rows: res.rows, rowCount: res.affectedRows ?? res.rows.length };
+  }
+
+  async execScript(sql: string): Promise<void> {
+    // PGlite always speaks the extended protocol from `query`, which rejects multi-statement
+    // text; `exec` is its simple-protocol equivalent.
+    await this.target.exec(sql);
   }
 }
 
@@ -86,6 +93,10 @@ export class PgliteExecutor implements SqlExecutor {
   ): Promise<SqlResult<T>> {
     const res = await this.db.query<T>(text, params as unknown[]);
     return { rows: res.rows, rowCount: res.affectedRows ?? res.rows.length };
+  }
+
+  async execScript(sql: string): Promise<void> {
+    await this.db.exec(sql);
   }
 
   async transaction<T>(fn: (tx: SqlSession) => Promise<T>): Promise<T> {

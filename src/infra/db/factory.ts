@@ -38,10 +38,22 @@ export async function probePostgres(url: string, timeoutMs = 3_000): Promise<str
     await executor.query('SELECT 1');
     return null;
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return describeConnectionFailure(error);
   } finally {
     await executor.close().catch(() => undefined);
   }
+}
+
+/**
+ * `pg` reports some connection failures with an empty `message` and only a `code` (`ECONNREFUSED`
+ * arrives that way), which would render the fallback notice as "did not answer ()". The notice
+ * is the one line the evaluator sees when Docker is not running, so it has to name a cause.
+ */
+function describeConnectionFailure(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const code = (error as { code?: unknown }).code;
+  const parts = [error.message, typeof code === 'string' ? code : ''].filter((p) => p !== '');
+  return parts.length > 0 ? parts.join(' ') : error.constructor.name;
 }
 
 export async function createSqlExecutor(config: DbConfig): Promise<DbSelection> {

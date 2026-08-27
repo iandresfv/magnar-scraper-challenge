@@ -30,6 +30,18 @@ export interface SqlSession {
     text: string,
     params?: readonly unknown[],
   ): Promise<SqlResult<T>>;
+
+  /**
+   * Runs a script of several statements separated by `;`, with no parameters.
+   *
+   * This exists because the two drivers genuinely differ: `pg` falls back to the simple query
+   * protocol when a statement carries no parameters and happily runs a whole file, while PGlite
+   * always uses the extended protocol and rejects multi-statement text outright. Migrations are
+   * the only caller. Everything else uses `query` with `$1` placeholders — passing user input
+   * through here would be an injection waiting to happen, and there is no parameter list to
+   * make that safe.
+   */
+  execScript(sql: string): Promise<void>;
 }
 
 export interface SqlExecutor extends SqlSession {
