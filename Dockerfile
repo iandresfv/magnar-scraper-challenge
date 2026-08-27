@@ -13,8 +13,12 @@
 #
 # The build is ordered so that a source change reuses the dependency layer: `npm ci` runs against
 # the lockfile alone, before any source is copied in.
+#
+# The base tag is exact — `node:22.23.2-alpine`, not `node:22-alpine`. A floating tag means the
+# image someone builds in six months is not the image these tests ran against, and the first
+# symptom of that is a failure nobody can reproduce.
 
-FROM node:22-alpine AS deps
+FROM node:22.23.2-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -26,12 +30,12 @@ RUN npm run build
 
 # Production dependencies only, resolved from the same lockfile — not a pruned copy of the dev
 # tree, which is how a dev-only package ends up in a released image.
-FROM node:22-alpine AS prod-deps
+FROM node:22.23.2-alpine AS prod-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM node:22-alpine AS runtime
+FROM node:22.23.2-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 # Signals reach PID 1 unchanged: the crawl handles SIGTERM itself, checkpoints, and exits 130.

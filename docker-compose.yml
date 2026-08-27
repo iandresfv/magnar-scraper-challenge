@@ -4,8 +4,12 @@
 # `app` (Fase 7) con el propio scraper en roles planner/worker. Quien no tenga Docker no
 # necesita nada de esto: `npm start` cae a PGlite + disco local y avisa en una línea.
 #
-# Los tags se fijan a una versión concreta en la Fase 7 (stage 44); mientras tanto se pinean ya
-# los que se usan en CI para que nadie desarrolle contra una imagen distinta a la que prueba.
+# Todos los tags son exactos, incluido el `node` del Dockerfile. Un tag flotante significa que la
+# imagen que alguien construya dentro de seis meses no es la que probó esta suite, y el primer
+# síntoma de eso es un fallo que nadie puede reproducir.
+#
+# Variables: compose interpola `${...}` desde el entorno o desde `.env` (ver .env.example). Los
+# servicios del perfil `app` traen todos sus defaults aquí, así que funcionan sin ningún archivo.
 
 name: juris-scraper
 
