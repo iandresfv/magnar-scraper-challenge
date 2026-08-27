@@ -17,8 +17,10 @@ import { createSqlExecutor } from '../infra/db/factory.js';
 import { migrate } from '../infra/db/migrator.js';
 import { createRepos } from '../infra/db/repos/index.js';
 import { PgJobQueue } from '../infra/db/pgJobQueue.js';
+import type { JobKind } from '../core/ports/jobQueue.js';
 import { FetchHttpClient } from '../infra/http/fetchHttpClient.js';
 import { crawlCommand } from './commands/crawl.js';
+import { dlqListCommand, retryDlqCommand } from './commands/dlq.js';
 import { ConfigError, resolveConfig, type Config } from './config.js';
 import { createSite } from './registry.js';
 import { resolveVersion } from './version.js';
@@ -102,8 +104,25 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         });
         return result.exitCode;
       }
+      case 'dlq:list':
+      case 'dlq-list': {
+        return dlqListCommand(queue, {
+          site: config.site,
+          kind: jobKindOf(argv),
+          write,
+        });
+      }
+      case 'retry-dlq': {
+        return retryDlqCommand(queue, {
+          site: config.site,
+          kind: jobKindOf(argv),
+          write,
+        });
+      }
       default: {
-        process.stderr.write(`unknown command "${config.command}". Known commands: crawl\n`);
+        process.stderr.write(
+          `unknown command "${config.command}". Known commands: crawl, dlq:list, retry-dlq\n`,
+        );
         return ExitCode.SANITY_FAILED;
       }
     }
@@ -114,6 +133,15 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   }
 }
 
+/** `--kind blob` narrows the DLQ commands to one sort of work. */
+function jobKindOf(argv: readonly string[]): JobKind | undefined {
+  const index = argv.indexOf('--kind');
+  const value = index === -1 ? undefined : argv[index + 1];
+  return value === 'search' || value === 'detail' || value === 'blob' || value === 'verify'
+    ? value
+    : undefined;
+}
+
 function usage(): string {
   return [
     `juris-scraper ${resolveVersion()} — multi-site judicial scraping engine`,
@@ -121,8 +149,10 @@ function usage(): string {
     'Usage: node dist/app/main.js <command> [options]',
     '',
     'Commands:',
-    '  crawl      crawl a site to completion, resuming any unfinished run',
-    '  version    print the version and exit',
+    '  crawl        crawl a site to completion, resuming any unfinished run',
+    '  dlq:list     list the jobs that exhausted their retries',
+    '  retry-dlq    move dead jobs back to pending so the next crawl reprocesses them',
+    '  version      print the version and exit',
     '',
     'Options:',
     '  --site <id>            which site to crawl (default: br-trf5)',
@@ -132,6 +162,7 @@ function usage(): string {
     '  --root-end <date>      last day (default: one year from today)',
     '  --pdf-budget <n|all>   how many PDFs this run may fetch (default: 150)',
     '  --max-jobs <n>         stop after n jobs, for a bounded demo',
+    '  --kind <k>             narrow dlq:list / retry-dlq to search|detail|blob',
     '',
     'Configuration also reads the environment; see .env.example.',
   ].join('\n');
