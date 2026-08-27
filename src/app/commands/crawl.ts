@@ -34,6 +34,7 @@ import type { BlobStore } from '../../core/ports/blobStore.js';
 import type { SiteAdapter, SiteSession } from '../../core/ports/siteAdapter.js';
 import { SiteChangedError } from '../../core/ports/siteAdapter.js';
 import { validatePdf } from '../../infra/blob/pdfValidate.js';
+import { METRICS, MetricsRegistry } from '../../infra/metrics/registry.js';
 import type { Config } from '../config.js';
 
 export interface CrawlDeps {
@@ -45,6 +46,8 @@ export interface CrawlDeps {
   queue: JobQueue;
   /** Absent in a planner-only process, which never downloads anything. */
   store?: BlobStore;
+  /** Shared with the /metrics endpoint when one is running. */
+  metrics?: MetricsRegistry;
   now?: () => Date;
   log?: (line: string) => void;
   /** Overrides the wall clock in tests so a progress interval does not slow a suite down. */
@@ -122,6 +125,7 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
     return session;
   };
 
+  const metrics = deps.metrics ?? new MetricsRegistry();
   const gaps: { node: PartitionNode; evidence: GapEvidence }[] = [];
 
   /**
@@ -293,8 +297,11 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
         continue;
       }
 
+      const jobStarted = Date.now();
       const outcome = await pipeline.run(job);
       jobsRun++;
+      metrics.increment(METRICS.jobs, { kind: job.kind, outcome: outcome.kind });
+      metrics.observe(METRICS.requestSeconds, Date.now() - jobStarted, { kind: job.kind });
 
       if (outcome.kind === 'done') {
         await queue.complete(job.id);
@@ -350,8 +357,13 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
         break;
       }
 
+      if (outcome.kind === 'retry') {
+        metrics.increment(METRICS.retries, { kind: job.kind, failure: outcome.failureClass });
+      }
+
       if (Date.now() - lastProgress >= progressEvery) {
         lastProgress = Date.now();
+        await publishGauges(site, repos, queue, metrics);
         log(await progressLine(site, repos, queue));
       }
     }
@@ -359,6 +371,17 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
 
   const stats = await queue.stats(site);
   if (exitCode === ExitCode.OK && stats.dead > 0) exitCode = ExitCode.DEAD_JOBS_REMAIN;
+
+  await publishGauges(site, repos, queue, metrics);
+  await repos.metrics.write(
+    metrics.snapshot().map((sample) => ({
+      runId,
+      site,
+      name: sample.name,
+      labels: sample.labels,
+      value: sample.value,
+    })),
+  );
 
   const cases = await repos.cases.countByState(site);
   const summary = {
@@ -385,6 +408,24 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
   );
 
   return { runId, exitCode, jobsRun, gaps, canary, stats };
+}
+
+/** Mirrors the run's live counts into the registry, so `/metrics` reflects the database. */
+async function publishGauges(
+  site: string,
+  repos: Repos,
+  queue: JobQueue,
+  metrics: MetricsRegistry,
+): Promise<void> {
+  const [stats, cases, blobs] = await Promise.all([
+    queue.stats(site),
+    repos.cases.countByState(site),
+    repos.blobs.countByState(site),
+  ]);
+  metrics.gauge(METRICS.jobsPending, stats.pending, { site });
+  metrics.gauge(METRICS.jobsDead, stats.dead, { site });
+  for (const [state, n] of Object.entries(cases)) metrics.gauge(METRICS.cases, n, { site, state });
+  for (const [state, n] of Object.entries(blobs)) metrics.gauge(METRICS.blobs, n, { site, state });
 }
 
 async function progressLine(site: string, repos: Repos, queue: JobQueue): Promise<string> {

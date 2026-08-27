@@ -20,6 +20,8 @@ import { PgJobQueue } from '../infra/db/pgJobQueue.js';
 import type { JobKind } from '../core/ports/jobQueue.js';
 import { FetchHttpClient } from '../infra/http/fetchHttpClient.js';
 import { createBlobStore } from '../infra/blob/factory.js';
+import { MetricsRegistry } from '../infra/metrics/registry.js';
+import { startMetricsServer } from '../infra/metrics/server.js';
 import { crawlCommand } from './commands/crawl.js';
 import { dlqListCommand, retryDlqCommand } from './commands/dlq.js';
 import { ConfigError, resolveConfig, type Config } from './config.js';
@@ -106,18 +108,32 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         if (blob.fallbackNotice !== null) write(blob.fallbackNotice);
         await blob.store.init();
 
-        const result = await crawlCommand({
-          store: blob.store,
-          config,
-          adapter,
-          http,
-          db: executor,
-          repos,
-          queue,
-          signal: controller.signal,
-          log: write,
-        });
-        return result.exitCode;
+        const metrics = new MetricsRegistry();
+        const metricsServer =
+          config.metricsPort === null
+            ? null
+            : await startMetricsServer(metrics, { port: config.metricsPort });
+        if (metricsServer !== null) {
+          write(`metrics on http://localhost:${String(metricsServer.port)}/metrics`);
+        }
+
+        try {
+          const result = await crawlCommand({
+            store: blob.store,
+            metrics,
+            config,
+            adapter,
+            http,
+            db: executor,
+            repos,
+            queue,
+            signal: controller.signal,
+            log: write,
+          });
+          return result.exitCode;
+        } finally {
+          await metricsServer?.close();
+        }
       }
       case 'dlq:list':
       case 'dlq-list': {
