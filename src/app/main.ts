@@ -17,6 +17,7 @@ import { createSqlExecutor } from '../infra/db/factory.js';
 import { migrate } from '../infra/db/migrator.js';
 import { createRepos } from '../infra/db/repos/index.js';
 import { PgJobQueue } from '../infra/db/pgJobQueue.js';
+import { PgThrottle } from '../infra/db/pgThrottle.js';
 import type { JobKind } from '../core/ports/jobQueue.js';
 import { FetchHttpClient } from '../infra/http/fetchHttpClient.js';
 import { createBlobStore } from '../infra/blob/factory.js';
@@ -122,6 +123,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 
         try {
           const result = await crawlCommand({
+            throttle: new PgThrottle(executor),
             store: blob.store,
             metrics,
             config,

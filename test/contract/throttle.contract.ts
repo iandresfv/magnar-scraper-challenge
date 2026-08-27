@@ -10,7 +10,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { SqlExecutor } from '../../src/core/ports/sql.js';
 import { migrate } from '../../src/infra/db/migrator.js';
-import { BreakerAbort, PgThrottle } from '../../src/infra/db/pgThrottle.js';
+import { PgThrottle } from '../../src/infra/db/pgThrottle.js';
+import { BreakerAbort } from '../../src/core/ports/throttle.js';
 
 export interface ThrottleSubject {
   name: string;

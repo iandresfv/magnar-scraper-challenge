@@ -17,6 +17,7 @@
 import type { FailureClass } from '../domain/types.js';
 import type { Job, JobKind } from '../ports/jobQueue.js';
 import { classifyFailure, type SiteClassifier } from './failureClassifier.js';
+import { BreakerAbort } from '../ports/throttle.js';
 
 export type HandlerOutcome =
   | { kind: 'done'; detail?: string }
@@ -122,6 +123,11 @@ export class Pipeline {
       if (error instanceof FatalSiteChange) {
         return Outcome.fatal(error.canaryId, error.message);
       }
+
+      // The breaker has given up on the site. Classifying this as a failure of the *job* would
+      // schedule a retry — more requests at a server that has already stopped answering — so it
+      // travels up to the loop untouched, which ends the run with its state intact.
+      if (error instanceof BreakerAbort) throw error;
 
       // An exception still has a class. Classifying it — rather than filing everything under
       // `PARSE` — is what lets a rate limit that surfaced as a thrown error get the six patient

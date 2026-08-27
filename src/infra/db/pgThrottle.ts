@@ -32,6 +32,7 @@ import type {
   ThrottleLease,
   ThrottleSnapshot,
 } from '../../core/ports/throttle.js';
+import { BreakerAbort } from '../../core/ports/throttle.js';
 import type { SqlExecutor } from '../../core/ports/sql.js';
 import { readNumber, readString, readTimestampOrNull } from './repos/rowMapping.js';
 
@@ -49,16 +50,6 @@ export interface PgThrottleOptions {
   breakerCapMs?: number;
   now?: () => number;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
-}
-
-export class BreakerAbort extends Error {
-  constructor(
-    readonly opens: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'BreakerAbort';
-  }
 }
 
 export class PgThrottle implements Throttle {

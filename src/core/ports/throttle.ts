@@ -29,6 +29,13 @@ export interface ThrottleSnapshot {
 export interface Throttle {
   /** Waits until a token and a concurrency slot are available, or the signal aborts. */
   acquire(site: string, signal?: AbortSignal): Promise<ThrottleLease>;
+  /**
+   * Stops the site being called at all for a while, after enough consecutive server-side
+   * failures. Throws `BreakerAbort` once reopening has stopped helping.
+   */
+  openBreaker(site: string, reason: string): Promise<void>;
+  /** Lets a single probe through once the open period has elapsed. Returns whether it did. */
+  halfOpenIfDue(site: string): Promise<boolean>;
   /** Feeds the control law. `'OK'` is a success; anything else is a failure class. */
   reportOutcome(
     site: string,
@@ -46,4 +53,21 @@ export interface ThrottleConfig {
   concurrencyMax: number;
   ratePerSec: number;
   burst: number;
+}
+
+/**
+ * The end of a run that the site would not have.
+ *
+ * Lives in the port rather than in the Postgres adapter because the engine has to be able to
+ * recognise it: it is the one failure that must travel all the way up the pipeline untouched,
+ * instead of being classified, retried, and turned into more requests.
+ */
+export class BreakerAbort extends Error {
+  constructor(
+    readonly opens: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'BreakerAbort';
+  }
 }

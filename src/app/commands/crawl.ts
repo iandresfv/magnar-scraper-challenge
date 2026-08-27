@@ -30,17 +30,30 @@ import type { JobQueue } from '../../core/ports/jobQueue.js';
 import type { Repos } from '../../core/ports/repos.js';
 import type { SqlExecutor } from '../../core/ports/sql.js';
 import type { HttpPort } from '../../core/ports/http.js';
+import type { Throttle } from '../../core/ports/throttle.js';
+import { BreakerAbort } from '../../core/ports/throttle.js';
 import type { BlobStore } from '../../core/ports/blobStore.js';
 import type { SiteAdapter, SiteSession } from '../../core/ports/siteAdapter.js';
 import { SiteChangedError } from '../../core/ports/siteAdapter.js';
 import { validatePdf } from '../../infra/blob/pdfValidate.js';
 import { METRICS, MetricsRegistry } from '../../infra/metrics/registry.js';
+import {
+  ThrottledHttpClient,
+  type ThrottledHttpOptions,
+} from '../../infra/http/throttledHttpClient.js';
 import type { Config } from '../config.js';
 
 export interface CrawlDeps {
   config: Config;
   adapter: SiteAdapter;
   http: HttpPort;
+  /**
+   * The shared politeness budget. When present every request goes through it, which is the only
+   * reason `--scale worker=3` does not mean three times the pressure on the court.
+   */
+  throttle?: Throttle;
+  /** Tuning for the breaker that watches consecutive server failures. */
+  breaker?: ThrottledHttpOptions;
   db: SqlExecutor;
   repos: Repos;
   queue: JobQueue;
@@ -65,7 +78,7 @@ export interface CrawlResult {
 }
 
 export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
-  const { config, adapter, http, db, repos, queue } = deps;
+  const { config, adapter, db, repos, queue } = deps;
   const now = deps.now ?? ((): Date => new Date());
   const log =
     deps.log ??
@@ -73,6 +86,10 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
       process.stdout.write(`${line}\n`);
     });
   const site = adapter.descriptor.id;
+  const http =
+    deps.throttle === undefined
+      ? deps.http
+      : new ThrottledHttpClient(deps.http, deps.throttle, site, deps.breaker ?? {});
 
   await repos.site.ensure({
     id: site,
@@ -81,6 +98,9 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
     baseUrl: adapter.descriptor.baseUrl,
     timezone: adapter.descriptor.timezone,
   });
+  // Idempotent: the row keeps whatever the control law has learned about this site across runs,
+  // so a restart does not hand back the concurrency a 429 took away an hour ago.
+  await deps.throttle?.ensure(site, config.throttle);
 
   // Resume rather than restart: a run whose root matches and which never finished is this one.
   const previous = await repos.runs.latest(site);
@@ -298,7 +318,18 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
       }
 
       const jobStarted = Date.now();
-      const outcome = await pipeline.run(job);
+      let outcome;
+      try {
+        outcome = await pipeline.run(job);
+      } catch (error) {
+        // The breaker has opened and re-opened until there was nothing left to conclude but that
+        // the site is down or this client is blocked. The lease is left to expire rather than
+        // marking the job failed: nothing is wrong with the job.
+        if (!(error instanceof BreakerAbort)) throw error;
+        exitCode = ExitCode.BREAKER_ABORTED;
+        log(error.message);
+        break;
+      }
       jobsRun++;
       metrics.increment(METRICS.jobs, { kind: job.kind, outcome: outcome.kind });
       metrics.observe(METRICS.requestSeconds, Date.now() - jobStarted, { kind: job.kind });
@@ -398,6 +429,7 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
   const finished =
     exitCode !== ExitCode.INTERRUPTED &&
     exitCode !== ExitCode.CANARY_FATAL &&
+    exitCode !== ExitCode.BREAKER_ABORTED &&
     config.crawl.maxJobs === null;
   if (finished) await repos.runs.finish(runId, { exitCode, summary });
 

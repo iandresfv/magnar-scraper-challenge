@@ -101,6 +101,77 @@ async function crawl(extra: string[] = []): Promise<Awaited<ReturnType<typeof cr
 
 const queue = (): PgJobQueue => new PgJobQueue(db, { defaultLeaseMs: 30_000 });
 
+// ────────────────────── the throttle, in the loop ────────────────────
+
+describe('the shared throttle is on the request path', { timeout: E2E_TIMEOUT }, () => {
+  it('runs every request through it, and hands every slot back', async () => {
+    const throttle = new PgThrottle(db, { cacheMs: 0, retryDelayMs: 5 });
+    const result = await crawlCommand({
+      // Rate and burst raised so the test measures the wiring rather than the wait; the control
+      // law itself is proved in the throttle contract.
+      config: resolveConfig({
+        argv: [
+          'crawl',
+          '--site',
+          SITE,
+          '--root-start',
+          ROOT.ini,
+          '--root-end',
+          ROOT.fim,
+          '--pdf-budget',
+          '0',
+        ],
+        env: { RATE_PER_SEC: '500', BURST: '500' },
+      }),
+      adapter: createSite(SITE, { baseUrl: fake.url }),
+      http: new FetchHttpClient({ defaultTimeoutMs: 5_000 }),
+      throttle,
+      db,
+      repos: createRepos(db),
+      queue: queue(),
+      log: () => undefined,
+      progressEveryMs: 1_000_000,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.OK);
+    const snapshot = await throttle.snapshot(SITE);
+    // Nothing left in flight: a leaked slot would shrink the budget of every later run.
+    expect(snapshot.inFlight).toBe(0);
+    expect(snapshot.breakerState).toBe('CLOSED');
+    // The bucket was actually spent, which is the proof the requests went through it.
+    expect(snapshot.tokens).toBeLessThan(500);
+  });
+
+  it('gives up with exit code 2 when the site stops answering, and stays resumable', async () => {
+    // A server that answers nothing but 503. Retrying it forever would be the rude choice.
+    fake.inject({ status: 503, times: 10_000 });
+    const throttle = new PgThrottle(db, {
+      cacheMs: 0,
+      retryDelayMs: 5,
+      maxConsecutiveOpens: 1,
+      breakerBaseMs: 5,
+    });
+
+    const result = await crawlCommand({
+      config: config(),
+      adapter: createSite(SITE, { baseUrl: fake.url }),
+      http: new FetchHttpClient({ defaultTimeoutMs: 5_000 }),
+      throttle,
+      breaker: { openAfter: 2 },
+      db,
+      repos: createRepos(db),
+      queue: queue(),
+      log: () => undefined,
+      progressEveryMs: 1_000_000,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.BREAKER_ABORTED);
+    // Unfinished on purpose: the work is intact and the next start resumes it.
+    const run = await createRepos(db).runs.get(result.runId);
+    expect(run?.finishedAt).toBeNull();
+  });
+});
+
 // ─────────────────────────── rate limiting ───────────────────────────
 
 describe('429, with and without Retry-After', { timeout: E2E_TIMEOUT }, () => {
