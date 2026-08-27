@@ -41,6 +41,16 @@ export interface CookieJarPort {
 
 export interface HttpPort {
   send(req: HttpRequest, jar: CookieJarPort): Promise<HttpResponse>;
+
+  /**
+   * A fresh, empty cookie jar.
+   *
+   * It lives on the transport port because creating one is a transport concern, and because a
+   * site adapter needs one at bootstrap but must not reach into `infra/` to get it — the
+   * hexagonal test says so, and it is right: which jar implementation is in use is not something
+   * a court should know.
+   */
+  newJar(): CookieJarPort;
 }
 
 /** Thrown by the transport for anything that never became a response. */

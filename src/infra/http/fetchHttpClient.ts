@@ -19,6 +19,7 @@
  */
 import type { CookieJarPort, HttpPort, HttpRequest, HttpResponse } from '../../core/ports/http.js';
 import { HttpTransportError } from '../../core/ports/http.js';
+import { CookieJar } from './cookieJar.js';
 import { decodeBody } from './encoding.js';
 
 /**
@@ -51,6 +52,10 @@ export class FetchHttpClient implements HttpPort {
     this.acceptLanguage = options.acceptLanguage ?? 'pt-BR,pt;q=0.9';
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.now = options.now ?? Date.now;
+  }
+
+  newJar(): CookieJarPort {
+    return CookieJar.create();
   }
 
   async send(req: HttpRequest, jar: CookieJarPort): Promise<HttpResponse> {
