@@ -282,7 +282,9 @@ function parseSearch(res: Fetched): SearchOutcome {
   const capBanner = /somente os (\d+) primeiros/.exec(html);
   const classes = [
     ...new Set(
-      [...html.matchAll(/<td[^>]*j_id257"[^>]*>\s*([^<\n]+?)\s*</g)].map((m) => (m[1] ?? '').trim()),
+      [...html.matchAll(/<td[^>]*j_id257"[^>]*>\s*([^<\n]+?)\s*</g)].map((m) =>
+        (m[1] ?? '').trim(),
+      ),
     ),
   ].filter((c) => c !== '');
   const cas = [
@@ -495,7 +497,8 @@ async function main(): Promise<void> {
     const res = await request(`${DETAIL}?ca=${ca}`, jar);
     const text = unescapeEntities(res.text);
     const dataDist =
-      /Data da Distribuição<\/label>[\s\S]{0,200}?>\s*(\d{2}\/\d{2}\/\d{4})/.exec(text)?.[1] ?? null;
+      /Data da Distribuição<\/label>[\s\S]{0,200}?>\s*(\d{2}\/\d{2}\/\d{4})/.exec(text)?.[1] ??
+      null;
     const labelsFound = DETAIL_LABELS.filter((label) => text.includes(label));
     details.push({
       ca: `${ca.slice(0, 8)}…`,

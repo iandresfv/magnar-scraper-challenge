@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The site is never contacted from CI. Nothing here touches a public court server.
+  NODE_VERSION: '22'
+
+jobs:
+  lint:
+    name: lint + format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - name: prettier check
+        run: npx prettier --check .
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: build
+        run: npm run build
+
+  test:
+    name: test (postgres + rustfs)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_USER: juris
+          POSTGRES_PASSWORD: juris
+          POSTGRES_DB: juris
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U juris"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      blob:
+        image: rustfs/rustfs:1.0.0-alpha.68
+        env:
+          RUSTFS_ACCESS_KEY: juris
+          RUSTFS_SECRET_KEY: jurisjuris
+        ports: ['9000:9000']
+    env:
+      TEST_DATABASE_URL: postgres://juris:juris@localhost:5432/juris
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY: juris
+      S3_SECRET_KEY: jurisjuris
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: wait for object storage
+        # The RustFS image is distroless, so it has no health command of its own; poll the API.
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null http://localhost:9000/ || [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9000/)" != "000" ]; then
+              echo "object storage answered after ${i} attempt(s)"; exit 0
+            fi
+            sleep 2
+          done
+          echo "object storage never answered"; exit 1
+      - run: npm test
+      - name: assert both drivers actually ran
+        # A skipped suite is a green run that proves half of what it claims. This fails the job
+        # if the Postgres or S3 contracts were silently skipped instead of executed.
+        run: |
+          npx vitest run --reporter=json --outputFile=/tmp/vitest.json || true
+          node -e '
+            const r = require("/tmp/vitest.json");
+            const names = r.testResults.flatMap(f => f.assertionResults.map(a => a.fullName));
+            const skipped = r.testResults.flatMap(f => f.assertionResults)
+              .filter(a => a.status === "pending" || a.status === "skipped")
+              .map(a => a.fullName);
+            const mustRun = ["pg (server)", "s3 ("];
+            const missing = mustRun.filter(m => !names.some(n => n.includes(m)));
+            if (missing.length) { console.error("contract never ran for:", missing); process.exit(1); }
+            if (skipped.length) { console.error("unexpectedly skipped:", skipped); process.exit(1); }
+            console.log("all contracts executed against real backends");
+          '
+
+  test-no-docker:
+    name: test (pglite + fs, no infrastructure)
+    runs-on: ubuntu-latest
+    env:
+      DB_DRIVER: pglite
+      BLOB_DRIVER: fs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # No TEST_DATABASE_URL and no S3_ENDPOINT: this is the path an evaluator without Docker
+      # takes, and it has to be green on its own.
+      - run: npm test
+      - name: migrate against the embedded database
+        run: npm run db:migrate
+      - name: initialise the on-disk blob store
+        run: npm run blob:init
+
+  node20:
+    name: test on the minimum supported node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # package.json declares >=20.6 for `node --env-file`; CI proves it rather than
+          # asserting it. The AWS SDK warns about Node 20 here, which is expected and harmless.
+          node-version: '20.6'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

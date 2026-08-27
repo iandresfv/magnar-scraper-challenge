@@ -14,21 +14,23 @@
 
 ## 1. Identificación del stack
 
-| Aspecto | Valor |
-|---|---|
-| Servidor de aplicación | JBoss + **JBoss Seam** (`.seam`, `cid` de conversación) |
-| Capa de vista | **JSF 1.2 + RichFaces 3.3.3.Final + Ajax4JSF (A4J)** |
-| Encoding | **Mixto** — A4J responde UTF-8; páginas completas declaran ISO-8859-1 pero sólo usan ASCII + entidades HTML. Ver §9 |
-| Balanceador | F5 BIG-IP (cookies `trf501*`) + sticky `ROUTER_ID` |
-| Entorno | `pjett` = ambiente de **treinamento/homologação** del TRF5 |
+| Aspecto                | Valor                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Servidor de aplicación | JBoss + **JBoss Seam** (`.seam`, `cid` de conversación)                                                             |
+| Capa de vista          | **JSF 1.2 + RichFaces 3.3.3.Final + Ajax4JSF (A4J)**                                                                |
+| Encoding               | **Mixto** — A4J responde UTF-8; páginas completas declaran ISO-8859-1 pero sólo usan ASCII + entidades HTML. Ver §9 |
+| Balanceador            | F5 BIG-IP (cookies `trf501*`) + sticky `ROUTER_ID`                                                                  |
+| Entorno                | `pjett` = ambiente de **treinamento/homologação** del TRF5                                                          |
 
 ### Cookies emitidas en el primer GET
+
 ```
 JSESSIONID=<id>.tt-consulta-229-ls7wx   ; path=/pjeconsulta   <- sufijo = nodo del cluster
 ROUTER_ID=<hash>                        ; path=/ ; Secure; SameSite=None
 trf501ad1ee3=<hex>                      ; path=/              <- F5
 trf501f66e06=<hex>                      ; path=/pjeconsulta   <- F5
 ```
+
 **Implicancia:** afinidad de nodo obligatoria. Un cookie jar por worker, persistido durante toda
 la vida del worker. Perder la cookie ⇒ 302 a `listView.seam` y pérdida de la conversación Seam.
 
@@ -40,18 +42,19 @@ La página carga `https://www.google.com/recaptcha/api.js`, pero el hook de subm
 
 ```js
 function executarReCaptcha() {
-    if (false) {                 // <- flag renderizada server-side en false
-        grecaptcha.execute();
-        return false;
-    }
-    executarPesquisa();          // camino real: submit A4J directo
+  if (false) {
+    // <- flag renderizada server-side en false
+    grecaptcha.execute();
+    return false;
+  }
+  executarPesquisa(); // camino real: submit A4J directo
 }
 ```
 
 **No hay que resolver ningún captcha.** El desafío es resoluble 100 % con `axios` + `cheerio`,
 tal como exige el enunciado.
 
-> Es una condición del entorno de *treinamento*. Sanity check obligatorio en el scraper: si
+> Es una condición del entorno de _treinamento_. Sanity check obligatorio en el scraper: si
 > `if (false)` cambia a `if (true)`, abortar con un error explícito en vez de fallar en silencio.
 
 ---
@@ -65,21 +68,21 @@ está **siempre vacío**. Cuando la consulta excede el tope, el servidor devuelv
 
 ```html
 <div class="alert alert-danger">
-  Sua consulta retornou muitos processos e somente os 30 primeiros serão exibidos.
-  Por favor, refine sua pesquisa.
+  Sua consulta retornou muitos processos e somente os 30 primeiros serão exibidos. Por favor, refine
+  sua pesquisa.
 </div>
 ```
 
 ### Mediciones reales (filtro `dataAutuação` inicio/fin)
 
-| Rango | Filas | Truncado |
-|---|---|---|
-| 2010-01-01 → 2019-12-31 | 30 | ✅ sí |
-| 2020-01-01 → 2023-12-31 | 30 | ✅ sí |
-| 2024-01-01 → 2024-06-30 | 30 | ✅ sí |
-| 2024-07-01 → 2024-12-31 | 30 | ✅ sí |
-| 2025-01-01 → 2025-12-31 | 30 | ✅ sí |
-| 2026-01-01 → 2026-12-31 | 30 | ✅ sí |
+| Rango                       | Filas  | Truncado  |
+| --------------------------- | ------ | --------- |
+| 2010-01-01 → 2019-12-31     | 30     | ✅ sí     |
+| 2020-01-01 → 2023-12-31     | 30     | ✅ sí     |
+| 2024-01-01 → 2024-06-30     | 30     | ✅ sí     |
+| 2024-07-01 → 2024-12-31     | 30     | ✅ sí     |
+| 2025-01-01 → 2025-12-31     | 30     | ✅ sí     |
+| 2026-01-01 → 2026-12-31     | 30     | ✅ sí     |
 | **2024-05-15 → 2024-05-15** | **24** | **❌ no** |
 
 **Conclusión:** "navegar por todo el sitio" ≠ paginar. Se resuelve **particionando el espacio de
@@ -96,17 +99,18 @@ una ventana móvil. Sin partición, es imposible alcanzar completitud.
 ## 4. Flujo de búsqueda (POST A4J)
 
 ### 4.1 Bootstrap
+
 ```
 GET https://pjett.trf5.jus.br/pjeconsulta/ConsultaPublica/listView.seam
 ```
 
 Del HTML hay que extraer **dinámicamente**:
 
-| Dato | Regex / selector | Valor observado |
-|---|---|---|
-| `action` del form | `<form id="fPP" ... action="([^"]+)"` | `/pjeconsulta/ConsultaPublica/listView.seam;jsessionid=<id>` |
-| **ID de la acción de búsqueda** | `executarPesquisa=function\(\)\{A4J\.AJAX\.Submit\('fPP',null,\{.*?'parameters':\{'(fPP:j_id\d+)'` | `fPP:j_id244` |
-| ViewState | `name="javax.faces.ViewState" ... value="([^"]*)"` | `j_id1` |
+| Dato                            | Regex / selector                                                                                   | Valor observado                                              |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `action` del form               | `<form id="fPP" ... action="([^"]+)"`                                                              | `/pjeconsulta/ConsultaPublica/listView.seam;jsessionid=<id>` |
+| **ID de la acción de búsqueda** | `executarPesquisa=function\(\)\{A4J\.AJAX\.Submit\('fPP',null,\{.*?'parameters':\{'(fPP:j_id\d+)'` | `fPP:j_id244`                                                |
+| ViewState                       | `name="javax.faces.ViewState" ... value="([^"]*)"`                                                 | `j_id1`                                                      |
 
 > ⚠️ **Trampa crítica.** El botón visible es `fPP:searchProcessos`, pero postear con ese
 > parámetro **NO ejecuta la búsqueda**: sólo re-renderiza el panel de mensajes vacío
@@ -116,6 +120,7 @@ Del HTML hay que extraer **dinámicamente**:
 > hardcodearlo**; siempre derivarlo del regex de arriba.
 
 ### 4.2 El POST
+
 ```
 POST https://pjett.trf5.jus.br{action}
 Content-Type: application/x-www-form-urlencoded
@@ -156,6 +161,7 @@ abogado, clase judicial (autocomplete), CPF/CNPJ de parte, nº OAB + estado, y r
 (`nomeParte=MARIA` devolvió 0 resultados — el matching no es substring libre).
 
 ### 4.3 La respuesta
+
 Documento XHTML parcial de A4J. El `<body>` trae el fragmento re-renderizado
 `fPP:processosGridPanel` completo. Parsear con cheerio directamente sobre el body.
 
@@ -191,6 +197,7 @@ Estructura de fila:
 Verificado: coincide exactamente con el `idProcessoTrf=16730` que exige el endpoint de PDF (§7).
 
 Consecuencias:
+
 1. **Clave de deduplicación natural** entre particiones solapadas (`16730`), estable y numérica.
 2. Permite construir la URL del PDF del proceso **sin siquiera abrir el detalle** ⇒ el pipeline de
    PDFs se puede desacoplar del de detalles.
@@ -230,7 +237,8 @@ Processo referência        0000007-07.1985.8.20.0124
 
 **Polo ativo / Polo passivo** — tabla por participante:
 `NOMBRE - CNPJ: 08.409.021/0001-77 (APELANTE)` / `NOMBRE - OAB RN1966 - CPF: 474.225.484-87 (ADVOGADO)`
-+ columna `Situação` (`Ativo`). Pie: `N resultados encontrados`.
+
+- columna `Situação` (`Ativo`). Pie: `N resultados encontrados`.
 
 **Movimentações do Processo** — lista `dd/MM/yyyy HH:mm:ss - <descripción>`, ~13+ por proceso.
 
@@ -238,7 +246,7 @@ Processo referência        0000007-07.1985.8.20.0124
 `N resultados encontrados`. En la muestra: 2 documentos (`Acórdão`).
 
 > ⚠️ Los datos personales (CPF/CNPJ de partes) son públicos por la Res. 121/CNJ, pero el propio
-> sitio advierte que procesos bajo *segredo de justiça* no se retornan. Vale la pena preverlo en el
+> sitio advierte que procesos bajo _segredo de justiça_ no se retornan. Vale la pena preverlo en el
 > README y, si aplica, ofrecer una flag de anonimización.
 
 ---
@@ -247,13 +255,14 @@ Processo referência        0000007-07.1985.8.20.0124
 
 Extraídos de los `onclick="openPopUp(...)"` de la tabla de documentos:
 
-| # | Endpoint | Método | Resultado verificado |
-|---|---|---|---|
-| 1 | `/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/reportPDF.seam?idProcessoTrf=<id>` | GET | **`application/pdf`, 23 340 B, `%PDF-1.4`** — capa/relatório del proceso |
-| 2 | `/pjeconsulta/Processo/reportReciboPDF.seam?idBin=<n>&idProcessoDoc=<n>&idProcessoTrf=<n>` | GET | **`application/pdf`, 18 311 B, `%PDF-1.4`** — comprobante por documento |
-| 3 | `/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/documentoSemLoginHTML.seam?ca=<tok>&idProcessoDoc=<n>` | GET | `text/html` — visor HTML del documento |
+| #   | Endpoint                                                                                                            | Método | Resultado verificado                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------ |
+| 1   | `/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/reportPDF.seam?idProcessoTrf=<id>`                     | GET    | **`application/pdf`, 23 340 B, `%PDF-1.4`** — capa/relatório del proceso |
+| 2   | `/pjeconsulta/Processo/reportReciboPDF.seam?idBin=<n>&idProcessoDoc=<n>&idProcessoTrf=<n>`                          | GET    | **`application/pdf`, 18 311 B, `%PDF-1.4`** — comprobante por documento  |
+| 3   | `/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/documentoSemLoginHTML.seam?ca=<tok>&idProcessoDoc=<n>` | GET    | `text/html` — visor HTML del documento                                   |
 
 ### Mecánica de la descarga (verificada)
+
 ```
 GET reportPDF.seam?idProcessoTrf=16730
   -> 302
@@ -270,6 +279,7 @@ GET reportPDF.seam?idProcessoTrf=16730
   devuelve 200 con `text/html` y produciría un "PDF" corrupto de 44 KB.
 
 ### Pares `idBin` / `idProcessoDoc` en el proceso de muestra
+
 ```
 (idBin=7127696, idProcessoDoc=7222997, idProcessoTrf=16730)  -> Acórdão 11/05/2026 00:36:17
 (idBin=3453502, idProcessoDoc=3469065, idProcessoTrf=16730)  -> Acórdão 27/10/2025 18:17:59
@@ -283,11 +293,11 @@ GET reportPDF.seam?idProcessoTrf=16730
 
 ## 8. Rate limiting — lo que se midió y lo que no
 
-| Prueba | Resultado |
-|---|---|
+| Prueba                                      | Resultado                                                        |
+| ------------------------------------------- | ---------------------------------------------------------------- |
 | 15 GETs **secuenciales** a `reportPDF.seam` | 15 × `200 application/pdf`. **0 × 429.** Latencia ~2.3–2.6 s/req |
-| 20 GETs **concurrentes** al mismo endpoint | 20 × `200 application/pdf`. **0 × 429.** |
-| Latencia del POST de búsqueda | 2.4 – 4.7 s |
+| 20 GETs **concurrentes** al mismo endpoint  | 20 × `200 application/pdf`. **0 × 429.**                         |
+| Latencia del POST de búsqueda               | 2.4 – 4.7 s                                                      |
 
 > ⚠️ **NO VERIFICADO: no se logró reproducir el 429** en el recon (deliberadamente acotado para
 > no abusar de un servidor público). El enunciado del desafío lo declara explícitamente, así que
@@ -310,11 +320,11 @@ backoff exponencial + jitter si no.
 > sentidos". **Era incorrecto**: el mojibake observado (`APELAÃÃO`) lo produjo el propio recon al
 > decodificar bytes UTF-8 como latin1. Verificado contra bytes crudos:
 
-| Respuesta | Header `Content-Type` | Bytes reales del cuerpo |
-|---|---|---|
+| Respuesta                                | Header `Content-Type`          | Bytes reales del cuerpo                                                              |
+| ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------ |
 | GET `listView.seam` (página de búsqueda) | `text/html;charset=ISO-8859-1` | Sólo ASCII + **entidades HTML** (`&uacute;`, `&ccedil;`) ⇒ el charset es irrelevante |
-| **POST A4J (resultados de búsqueda)** | **`text/xml;charset=UTF-8`** | **UTF-8 real** (`ser\xc3\xa3o`, `APELA\xc3\x87\xc3\x83O`) |
-| GET detalle | `text/html;charset=ISO-8859-1` | Sólo ASCII + entidades HTML ⇒ irrelevante |
+| **POST A4J (resultados de búsqueda)**    | **`text/xml;charset=UTF-8`**   | **UTF-8 real** (`ser\xc3\xa3o`, `APELA\xc3\x87\xc3\x83O`)                            |
+| GET detalle                              | `text/html;charset=ISO-8859-1` | Sólo ASCII + entidades HTML ⇒ irrelevante                                            |
 
 **Regla correcta:** decodificar **por detección** (charset del header → declaración `<?xml>`/`<meta>`
 → UTF-8 estricto → fallback latin1), nunca hardcodear ninguno de los dos. El `<meta charset=UTF-8>`
@@ -347,15 +357,15 @@ no-espacio. Si aparece, se decodificó con la tabla equivocada.
 
 ## 10. Números de referencia para dimensionar
 
-| Métrica | Valor observado |
-|---|---|
-| Latencia búsqueda | 2.4 – 4.7 s |
-| Latencia detalle | ~2 s |
-| Latencia PDF | ~2.4 s |
-| Tope por consulta | 30 filas |
-| Documentos por proceso (muestra) | 2 |
-| Tamaño PDF | 18–23 KB |
-| Concurrencia tolerada sin error | ≥ 20 (medido) |
+| Métrica                          | Valor observado |
+| -------------------------------- | --------------- |
+| Latencia búsqueda                | 2.4 – 4.7 s     |
+| Latencia detalle                 | ~2 s            |
+| Latencia PDF                     | ~2.4 s          |
+| Tope por consulta                | 30 filas        |
+| Documentos por proceso (muestra) | 2               |
+| Tamaño PDF                       | 18–23 KB        |
+| Concurrencia tolerada sin error  | ≥ 20 (medido)   |
 
 ---
 

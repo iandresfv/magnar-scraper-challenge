@@ -14,23 +14,23 @@
 
 ## 1. Resultado en una tabla
 
-| # | Pregunta abierta | Respuesta medida | Consecuencia en el código |
-|---|---|---|---|
-| a | ¿Qué charset devuelve cada endpoint? | **La respuesta A4J es UTF-8 real. La página de búsqueda y la de detalle declaran ISO-8859-1 y llevan bytes no-ASCII de verdad**, así que hay que creerles | Decodificación por detección (UTF-8 estricto → charset declarado → latin1). Ver §3 |
-| b | ¿Cuál es el marcador exacto de "0 resultados"? | El pie **siempre** renderiza `<span class="text-muted">resultados encontrados</span>`; con resultados lleva el número delante | Cero se detecta por *número ausente*, no por un mensaje. Ver §4 |
-| c | ¿`classeJudicial` filtra? (SUP-2, R-5) | **Sí, pero sólo si el cuerpo va codificado en latin1.** En UTF-8 devuelve 0 filas en silencio. Y el match es **por prefijo**, no exacto | El eje secundario existe. Ver §5 — es el hallazgo más importante del spike |
-| d | ¿`numProcesso` parcial filtra? | **No.** `2024` sobre 1990–2027 devolvió 0 filas | **No hay tercer eje.** El nodo RESIDUAL y el GAP declarado siguen siendo necesarios |
-| e | `Data da Distribuição` vs el día filtrado (SUP-3) | **Coincide en 4 de 4** detalles que cargaron | SUP-3 se sostiene. El sanity check 6 lo sigue midiendo en el run real |
-| f | ¿Caduca el `ca`? (R-3) | **Sobrevive a otra búsqueda y a 10 minutos de inactividad.** Ambos `stillValid=true` | El pipeline de detalles **se puede desacoplar** del de búsqueda. Ver §6 |
-| g | Vocabulario de clases | **20 clases** cosechadas de 18 días repartidos en 3 años | Semilla en `src/sites/br-trf5/classes.seed.json` |
-| h | ¿Un día cabe siempre bajo el tope? | **No: 9 de 18 días muestreados (50 %) vinieron truncados** | El eje secundario no es un plan B: es camino habitual. Ver §7 |
+| #   | Pregunta abierta                                  | Respuesta medida                                                                                                                                          | Consecuencia en el código                                                           |
+| --- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| a   | ¿Qué charset devuelve cada endpoint?              | **La respuesta A4J es UTF-8 real. La página de búsqueda y la de detalle declaran ISO-8859-1 y llevan bytes no-ASCII de verdad**, así que hay que creerles | Decodificación por detección (UTF-8 estricto → charset declarado → latin1). Ver §3  |
+| b   | ¿Cuál es el marcador exacto de "0 resultados"?    | El pie **siempre** renderiza `<span class="text-muted">resultados encontrados</span>`; con resultados lleva el número delante                             | Cero se detecta por _número ausente_, no por un mensaje. Ver §4                     |
+| c   | ¿`classeJudicial` filtra? (SUP-2, R-5)            | **Sí, pero sólo si el cuerpo va codificado en latin1.** En UTF-8 devuelve 0 filas en silencio. Y el match es **por prefijo**, no exacto                   | El eje secundario existe. Ver §5 — es el hallazgo más importante del spike          |
+| d   | ¿`numProcesso` parcial filtra?                    | **No.** `2024` sobre 1990–2027 devolvió 0 filas                                                                                                           | **No hay tercer eje.** El nodo RESIDUAL y el GAP declarado siguen siendo necesarios |
+| e   | `Data da Distribuição` vs el día filtrado (SUP-3) | **Coincide en 4 de 4** detalles que cargaron                                                                                                              | SUP-3 se sostiene. El sanity check 6 lo sigue midiendo en el run real               |
+| f   | ¿Caduca el `ca`? (R-3)                            | **Sobrevive a otra búsqueda y a 10 minutos de inactividad.** Ambos `stillValid=true`                                                                      | El pipeline de detalles **se puede desacoplar** del de búsqueda. Ver §6             |
+| g   | Vocabulario de clases                             | **20 clases** cosechadas de 18 días repartidos en 3 años                                                                                                  | Semilla en `src/sites/br-trf5/classes.seed.json`                                    |
+| h   | ¿Un día cabe siempre bajo el tope?                | **No: 9 de 18 días muestreados (50 %) vinieron truncados**                                                                                                | El eje secundario no es un plan B: es camino habitual. Ver §7                       |
 
 Y dos hallazgos que nadie había pedido buscar, ambos con consecuencias:
 
-| # | Hallazgo | Por qué importa |
-|---|---|---|
-| i | **Una cabecera `Cookie:` vacía hace que el F5 rechace la petición, y responde `200 OK`** con una página "Requisição - Rejeitada" | Falla en la primera petición de cada sesión, y falla en silencio. Ver §2 |
-| j | Un `ca` de cada cinco redirigió a `errorUnexpected.seam` de forma reproducible | No todo 302 en el detalle es sesión perdida. Ver §6 |
+| #   | Hallazgo                                                                                                                         | Por qué importa                                                          |
+| --- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| i   | **Una cabecera `Cookie:` vacía hace que el F5 rechace la petición, y responde `200 OK`** con una página "Requisição - Rejeitada" | Falla en la primera petición de cada sesión, y falla en silencio. Ver §2 |
+| j   | Un `ca` de cada cinco redirigió a `errorUnexpected.seam` de forma reproducible                                                   | No todo 302 en el detalle es sesión perdida. Ver §6                      |
 
 ---
 
@@ -51,13 +51,13 @@ content-type: text/html;charset=ISO-8859-1
 respuesta perfectamente normal, la parsea, no encuentra el formulario y concluye "el sitio
 cambió". Medido de forma aislada, cinco variantes:
 
-| Cabeceras | Resultado |
-|---|---|
+| Cabeceras                                  | Resultado                                   |
+| ------------------------------------------ | ------------------------------------------- |
 | UA + Accept-Language + **`Cookie:` vacía** | **200, 22 287 B, "Requisição - Rejeitada"** |
-| UA + Accept-Language, sin `Cookie` | 200, 48 116 B, formulario |
-| sólo UA | 200, 48 143 B, formulario |
-| UA + Accept + Accept-Language | 200, 48 143 B, formulario |
-| sin cabeceras | 200, 48 116 B, formulario |
+| UA + Accept-Language, sin `Cookie`         | 200, 48 116 B, formulario                   |
+| sólo UA                                    | 200, 48 143 B, formulario                   |
+| UA + Accept + Accept-Language              | 200, 48 143 B, formulario                   |
+| sin cabeceras                              | 200, 48 116 B, formulario                   |
 
 **Reglas que salen de aquí:**
 
@@ -74,11 +74,11 @@ cambió". Medido de forma aislada, cinco variantes:
 El recon corregido ya decía que la respuesta A4J es UTF-8 y no ISO-8859-1. El spike lo confirma
 y añade un matiz que **el fixture no podía mostrar**:
 
-| Endpoint | `Content-Type` | Bytes reales | Rama que ganó |
-|---|---|---|---|
-| `GET listView.seam` | `charset=ISO-8859-1` | **Contiene bytes no-ASCII** (`nonAsciiBytes: true`) | **charset declarado** |
-| `POST` A4J (resultados) | `charset=UTF-8` | UTF-8 real | UTF-8 estricto |
-| `GET` detalle | `charset=ISO-8859-1` | Bytes no-ASCII + entidades | **charset declarado** |
+| Endpoint                | `Content-Type`       | Bytes reales                                        | Rama que ganó         |
+| ----------------------- | -------------------- | --------------------------------------------------- | --------------------- |
+| `GET listView.seam`     | `charset=ISO-8859-1` | **Contiene bytes no-ASCII** (`nonAsciiBytes: true`) | **charset declarado** |
+| `POST` A4J (resultados) | `charset=UTF-8`      | UTF-8 real                                          | UTF-8 estricto        |
+| `GET` detalle           | `charset=ISO-8859-1` | Bytes no-ASCII + entidades                          | **charset declarado** |
 
 El fixture `01-listview-form.html` capturado en el recon era ASCII puro con entidades, lo que
 hacía pensar que el charset de las páginas completas era irrelevante. **En la página viva no lo
@@ -98,9 +98,12 @@ En el **sentido de subida** la regla es la contraria y es igual de importante: v
 No hay mensaje. El pie de la tabla siempre existe; lo que cambia es si lleva número:
 
 ```html
-<span class="text-muted">resultados encontrados</span>        <!-- 0 resultados -->
-<span class="text-muted">24 resultados encontrados</span>     <!-- 24 -->
-<span class="text-muted">30 resultados encontrados</span>     <!-- 30, y además el banner -->
+<span class="text-muted">resultados encontrados</span>
+<!-- 0 resultados -->
+<span class="text-muted">24 resultados encontrados</span>
+<!-- 24 -->
+<span class="text-muted">30 resultados encontrados</span>
+<!-- 30, y además el banner -->
 ```
 
 Además, toda respuesta de búsqueda real trae `<meta name="Ajax-Update-Ids"
@@ -118,13 +121,13 @@ Cuerpo de una respuesta vacía: 4 846 bytes.
 
 Con el día dorado (15/05/2024, 24 procesos sin truncar) como control:
 
-| Consulta | Filas |
-|---|---|
-| sin filtro de clase | **24** |
-| `classeJudicial=APELAÇÃO CÍVEL`, cuerpo en **UTF-8** | **0** |
+| Consulta                                              | Filas  |
+| ----------------------------------------------------- | ------ |
+| sin filtro de clase                                   | **24** |
+| `classeJudicial=APELAÇÃO CÍVEL`, cuerpo en **UTF-8**  | **0**  |
 | `classeJudicial=APELAÇÃO CÍVEL`, cuerpo en **latin1** | **12** |
-| `classeJudicial=APELACAO CIVEL` (sin acentos) | 12 |
-| `classeJudicial=APELA` (prefijo) | **18** |
+| `classeJudicial=APELACAO CIVEL` (sin acentos)         | 12     |
+| `classeJudicial=APELA` (prefijo)                      | **18** |
 
 **Diagnóstico.** El formulario se sirve como ISO-8859-1 y el servidor decodifica el cuerpo con
 ese charset. `URLSearchParams` codifica siempre en UTF-8, así que `Ç` viajaba como `%C3%87` y el
@@ -160,10 +163,10 @@ que un día quedó completo. Dos mitigaciones, ambas implementadas:
 El riesgo R-3 asumía que `ca` podía caducar pronto y que el detalle debía leerse en la misma
 sesión y de inmediato. **Medido, no es así:**
 
-| Prueba | Resultado |
-|---|---|
+| Prueba                                                                 | Resultado                                    |
+| ---------------------------------------------------------------------- | -------------------------------------------- |
 | Reusar un `ca` después de lanzar **otra búsqueda** con la misma sesión | `200`, detalle completo (`stillValid: true`) |
-| Reusar un `ca` tras **600 s de inactividad** | `200`, detalle completo (`stillValid: true`) |
+| Reusar un `ca` tras **600 s de inactividad**                           | `200`, detalle completo (`stillValid: true`) |
 
 Consecuencia de diseño: el job `detail` **no necesita afinidad** con el worker que hizo la
 búsqueda dentro de esa ventana, lo que hace real el escalado con `--scale`. Se mantiene de todos
@@ -186,11 +189,11 @@ Se cuenta en el reporte para que la tasa sea visible.
 
 18 días muestreados entre 2024 y 2026, uno por consulta:
 
-| Filas | Días | |
-|---|---|---|
-| 0 | 2 | 15/11/2026, 18/11/2026 |
-| 1–19 | 4 | 3, 4, 7, 12 filas |
-| 20–29 | 3 | 20, 22, 24 filas |
+| Filas             | Días  |                                                                                                            |
+| ----------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
+| 0                 | 2     | 15/11/2026, 18/11/2026                                                                                     |
+| 1–19              | 4     | 3, 4, 7, 12 filas                                                                                          |
+| 20–29             | 3     | 20, 22, 24 filas                                                                                           |
 | **30 (truncado)** | **9** | 02/09/2025, 09/02/2026, 03/05/2026, 10/10/2024, 24/08/2026, 11/06/2025, 25/04/2024, 05/09/2025, 12/02/2026 |
 
 **El 50 % de los días muestreados viene truncado.** El recon había medido un solo día (24 filas)
@@ -227,18 +230,18 @@ descartar un plan.
 
 ## 9. Números para dimensionar
 
-| Métrica | Valor medido |
-|---|---|
-| Latencia del bootstrap | 1,4 s |
-| Latencia de búsqueda | 0,9 – 3,0 s |
-| Latencia de detalle | 1,6 – 2,4 s |
-| Cookies emitidas | 4 (`JSESSIONID`, `ROUTER_ID`, `trf501ad1ee3`, `trf501f66e06`) |
+| Métrica                        | Valor medido                                                    |
+| ------------------------------ | --------------------------------------------------------------- |
+| Latencia del bootstrap         | 1,4 s                                                           |
+| Latencia de búsqueda           | 0,9 – 3,0 s                                                     |
+| Latencia de detalle            | 1,6 – 2,4 s                                                     |
+| Cookies emitidas               | 4 (`JSESSIONID`, `ROUTER_ID`, `trf501ad1ee3`, `trf501f66e06`)   |
 | `searchActionId` observado hoy | `fPP:j_id244` (idéntico al recon; se sigue derivando por regex) |
-| `ViewState` | `j_id1` |
-| Captcha | `if (false)` — sigue desactivado |
-| Tope | 30, leído del banner |
-| Cuerpo de respuesta vacía | 4 846 B |
-| Clases distintas conocidas | 20 |
+| `ViewState`                    | `j_id1`                                                         |
+| Captcha                        | `if (false)` — sigue desactivado                                |
+| Tope                           | 30, leído del banner                                            |
+| Cuerpo de respuesta vacía      | 4 846 B                                                         |
+| Clases distintas conocidas     | 20                                                              |
 
 ---
 

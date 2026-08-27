@@ -1,5 +1,7 @@
 # juris-scraper
 
+[![CI](https://github.com/iandresfv/magnar-scraper-challenge/actions/workflows/ci.yml/badge.svg)](https://github.com/iandresfv/magnar-scraper-challenge/actions/workflows/ci.yml)
+
 Motor de scraping judicial multi-sitio en TypeScript. El primer sitio implementado es la
 Consulta Pública del PJe del **TRF5** (`pjett.trf5.jus.br`), que no pagina y corta en 30
 resultados: la completitud se construye particionando el espacio de búsqueda, no paginando.
