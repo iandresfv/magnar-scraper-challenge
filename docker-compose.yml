@@ -88,7 +88,15 @@ services:
     # Sale en cuanto siembra la raíz: no es un servicio, es un paso.
     restart: 'no'
     command:
-      ['crawl', '--role', 'planner', '--site', '${SITE:-fake-pje}', '--pdf-budget', '${PDF_BUDGET:-0}']
+      [
+        'crawl',
+        '--role',
+        'planner',
+        '--site',
+        '${SITE:-fake-pje}',
+        '--pdf-budget',
+        '${PDF_BUDGET:-0}',
+      ]
     environment: &app_env
       DB_DRIVER: pg
       DATABASE_URL: postgres://${POSTGRES_USER:-juris}:${POSTGRES_PASSWORD:-juris}@db:5432/${POSTGRES_DB:-juris}
