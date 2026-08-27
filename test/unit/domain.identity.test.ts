@@ -165,6 +165,15 @@ describe('text normalisation', () => {
     expect(cleanTextOrNull('x')).toBe('x');
   });
 
+  it('detects the windows-1252 rendering of mojibake, not only the latin1 one', () => {
+    // The WHATWG standard aliases `iso-8859-1` to windows-1252, so a full-ICU runtime renders
+    // continuation bytes 0x80-0x9F as typographic characters. Both renderings are corruption.
+    const asLatin1 = String.fromCharCode(0x41, 0xc3, 0x87, 0xc3, 0x83);
+    const asWindows1252 = 'A' + '\u00C3\u2021\u00C3\u0192';
+    expect(detectMojibake(asLatin1)).toBe(true);
+    expect(detectMojibake(asWindows1252)).toBe(true);
+  });
+
   it('detects mojibake but not legitimate diacritics', () => {
     expect(detectMojibake('APELAÇÃO CÍVEL')).toBe(false);
     expect(detectMojibake('São Paulo, ação, coração')).toBe(false);

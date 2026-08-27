@@ -11,8 +11,23 @@
  * (U+0080–U+00BF), and no real Portuguese, Spanish or English text ever does that.
  */
 
-/** `Â` or `Ã` followed by a UTF-8 continuation byte rendered as a latin1 character. */
-const MOJIBAKE_PATTERN = /[ÂÃ][-¿]/;
+/**
+ * The signature of UTF-8 read as a single-byte encoding.
+ *
+ * A lead byte (`C2`/`C3`, which render as the two capital A variants) is always followed by what
+ * was a UTF-8 continuation byte, `0x80`-`0xBF`. Under true ISO-8859-1 those render as
+ * U+0080-U+00BF. Under **windows-1252** - which is what the WHATWG standard makes the label
+ * `iso-8859-1` mean, and what a full-ICU runtime actually does - the range `0x80`-`0x9F` renders
+ * as typographic characters instead. Both renderings have to be caught: which one appears depends
+ * on how the runtime that produced the damage was built, and a detector that knows only one of
+ * them passes half the corrupted data silently. No real Portuguese, Spanish or English text
+ * produces either pair.
+ *
+ * The class is written with escapes rather than literal characters so the pattern cannot be
+ * damaged by the very encoding problem it exists to detect.
+ */
+const MOJIBAKE_PATTERN =
+  /[\u00C2\u00C3][\u0080-\u00BF\u20AC\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0160\u2039\u0152\u017D\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\u017E\u0178]/;
 
 export function detectMojibake(text: string): boolean {
   return MOJIBAKE_PATTERN.test(text);
