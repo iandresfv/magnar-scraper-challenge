@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  countCases,
   describeExit,
   formatDuration,
   formatEta,
@@ -26,6 +27,35 @@ describe('durations', () => {
     expect(formatDuration(3_840_000)).toBe('1h 04m');
     expect(formatDuration(0)).toBe('0s');
     expect(formatDuration(-5)).toBe('0s');
+  });
+});
+
+describe('counting cases', () => {
+  it('counts every state, including the ones the site could not render', () => {
+    // The bug this replaces: a case that failed its detail dropped out of the total, so the
+    // running count went *down* as the crawl advanced.
+    expect(countCases({ LISTED: 40, DETAILED: 300, DETAIL_FAILED: 47 })).toEqual({
+      total: 387,
+      detailed: 300,
+      failed: 47,
+    });
+    expect(countCases({})).toEqual({ total: 0, detailed: 0, failed: 0 });
+  });
+
+  it('names the unrenderable ones in the progress line and in the summary', () => {
+    const withFailures = snapshot({ cases: { LISTED: 10, DETAILED: 300, DETAIL_FAILED: 47 } });
+    expect(formatProgress(withFailures)).toContain('cases 357 (300 detailed, 47 unrenderable)');
+    expect(
+      renderSummary({
+        ...withFailures,
+        runId: 'run-1',
+        site: 'br-trf5',
+        exitCode: ExitCode.OK,
+        finished: true,
+        gaps: 0,
+        canary: null,
+      }).join('\n'),
+    ).toContain('357 found · 300 detailed · 47 the site could not render');
   });
 });
 
@@ -72,7 +102,7 @@ describe('the closing summary', () => {
   it('reports the run, the counts and the exit code in words', () => {
     const text = summary();
     expect(text).toContain('run-1 · br-trf5 · finished');
-    expect(text).toContain('340 listed · 300 detailed');
+    expect(text).toContain('340 found · 300 detailed');
     expect(text).toContain('60 stored of 150 known');
     expect(text).toContain('exit');
     expect(text).toContain('0 — the run completed');

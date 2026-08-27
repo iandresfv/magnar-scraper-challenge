@@ -24,6 +24,7 @@ import { ExitCode } from '../../core/domain/types.js';
 import { assertTiling } from '../../core/engine/partitionTree.js';
 import { anonymize } from '../../core/domain/personId.js';
 import { verifyRun } from '../../core/usecases/verifyRun.js';
+import { countCases } from '../progress.js';
 import type { PgCaseRepo } from '../../infra/db/repos/index.js';
 
 export interface ReportOptions {
@@ -143,7 +144,7 @@ export async function reportCommand(options: ReportOptions): Promise<number> {
   write(
     `tiling ${coverage.tiling.ok ? 'holds' : 'is BROKEN'} · ` +
       `${String(coverage.partitions.gaps)} gap(s) · ` +
-      `${String((cases['LISTED'] ?? 0) + (cases['DETAILED'] ?? 0))} case(s) · ` +
+      `${String(countCases(cases).total)} case(s) · ` +
       `${String(documents['STORED'] ?? 0)}/${String(
         (documents['STORED'] ?? 0) + (documents['PENDING'] ?? 0),
       )} document(s) stored`,
@@ -296,7 +297,7 @@ function renderCase(
 }
 
 function renderCoverageMarkdown(c: CoverageJson): string {
-  const totalCases = (c.cases['LISTED'] ?? 0) + (c.cases['DETAILED'] ?? 0);
+  const counted = countCases(c.cases);
   const storedDocs = c.documents['STORED'] ?? 0;
   const knownDocs = storedDocs + (c.documents['PENDING'] ?? 0) + (c.documents['FAILED'] ?? 0);
 
@@ -318,7 +319,8 @@ function renderCoverageMarkdown(c: CoverageJson): string {
     `| Particiones resueltas | ${String(c.partitions.leaves)} primarias + ${String(c.partitions.secondaryLeaves)} por clase |`,
     `| Particiones divididas | ${String(c.partitions.split)} |`,
     `| **GAP declarados** | **${String(c.partitions.gaps)}** |`,
-    `| Procesos únicos | ${String(totalCases)} (${String(c.cases['DETAILED'] ?? 0)} con detalle) |`,
+    `| Procesos únicos | ${String(counted.total)} (${String(counted.detailed)} con detalle` +
+      `${counted.failed === 0 ? '' : `, ${String(counted.failed)} que el sitio no pudo renderizar`}) |`,
     `| Documentos | ${String(storedDocs)} almacenados de ${String(knownDocs)} conocidos |`,
     '',
   ];

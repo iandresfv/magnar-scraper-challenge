@@ -21,15 +21,35 @@ export interface ProgressSnapshot {
   elapsedMs: number;
 }
 
+/**
+ * How many cases were found, and what became of them.
+ *
+ * The total counts every state, `DETAIL_FAILED` included. Leaving it out made the running total
+ * *shrink* as a crawl progressed — a case the site cannot render is still a case that was found,
+ * and a counter that goes backwards is a counter nobody believes.
+ */
+export function countCases(cases: Record<string, number>): {
+  total: number;
+  detailed: number;
+  failed: number;
+} {
+  return {
+    total: Object.values(cases).reduce((sum, n) => sum + n, 0),
+    detailed: cases['DETAILED'] ?? 0,
+    failed: cases['DETAIL_FAILED'] ?? 0,
+  };
+}
+
 export function formatProgress(snapshot: ProgressSnapshot): string {
   const { queue, cases, blobs } = snapshot;
-  const listed = (cases['LISTED'] ?? 0) + (cases['DETAILED'] ?? 0);
+  const counted = countCases(cases);
   const storedDocs = blobs['STORED'] ?? 0;
   const knownDocs = storedDocs + (blobs['PENDING'] ?? 0);
 
   return [
     `jobs ${String(queue.done)} done · ${String(queue.pending)} pending · ${String(queue.dead)} dead`,
-    `cases ${String(listed)} (${String(cases['DETAILED'] ?? 0)} detailed)`,
+    `cases ${String(counted.total)} (${String(counted.detailed)} detailed` +
+      `${counted.failed === 0 ? '' : `, ${String(counted.failed)} unrenderable`})`,
     `pdfs ${String(storedDocs)}/${String(knownDocs)}`,
     `${formatRate(snapshot)} · eta ${formatEta(snapshot)}`,
   ].join(' · ');
@@ -83,7 +103,7 @@ export interface SummaryInput extends ProgressSnapshot {
  * two runs, and a column of numbers compares in one glance.
  */
 export function renderSummary(input: SummaryInput): string[] {
-  const listed = (input.cases['LISTED'] ?? 0) + (input.cases['DETAILED'] ?? 0);
+  const counted = countCases(input.cases);
   const storedDocs = input.blobs['STORED'] ?? 0;
   const knownDocs = storedDocs + (input.blobs['PENDING'] ?? 0);
   const byKind = Object.entries(input.queue.byKind)
@@ -99,7 +119,11 @@ export function renderSummary(input: SummaryInput): string[] {
         `${String(input.queue.pending)} pending · ${String(input.queue.dead)} dead`,
     ],
     ...(byKind === '' ? [] : ([['by kind', byKind]] as [string, string][])),
-    ['cases', `${String(listed)} listed · ${String(input.cases['DETAILED'] ?? 0)} detailed`],
+    [
+      'cases',
+      `${String(counted.total)} found · ${String(counted.detailed)} detailed` +
+        (counted.failed === 0 ? '' : ` · ${String(counted.failed)} the site could not render`),
+    ],
     ['documents', `${String(storedDocs)} stored of ${String(knownDocs)} known`],
     [
       'gaps',
