@@ -27,7 +27,7 @@ S3, a GCS por interoperabilidad HMAC o a Garage cambiando `S3_ENDPOINT`.
 ## Consecuencias
 
 - Un `BlobStore` con dos implementaciones y **una** suite de contrato que corre contra las dos.
-- La clave del objeto es determinista (`site/tipo/idOrigem/idDoc.pdf`), así que reintentar una
-  descarga sobrescribe en vez de duplicar.
+- La clave del objeto es determinista —`{site}/{año}/{numero}/{numero}__{tipo}[__{docId}].pdf`—,
+  así que reintentar una descarga sobrescribe en vez de duplicar.
 - Cada PDF se valida antes de subirse (cabecera `%PDF-`, `%%EOF`, tamaño mínimo): un HTML de
   sesión caída no se almacena como si fuera un documento.
