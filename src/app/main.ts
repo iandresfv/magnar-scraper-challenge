@@ -25,6 +25,7 @@ import { startMetricsServer } from '../infra/metrics/server.js';
 import { crawlCommand } from './commands/crawl.js';
 import { dlqListCommand, retryDlqCommand } from './commands/dlq.js';
 import { verifyCommand } from './commands/verify.js';
+import { reportCommand } from './commands/report.js';
 import { ConfigError, resolveConfig, type Config } from './config.js';
 import { createSite } from './registry.js';
 import { resolveVersion } from './version.js';
@@ -155,6 +156,21 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           write,
         });
       }
+      case 'report': {
+        const outDir = flagValue(argv, '--out');
+        const sampleSize = flagValue(argv, '--sample');
+        // `--no-anonymize` has to be asked for explicitly: the default writes a file that is safe
+        // to commit, and the unsafe variant should be a deliberate keystroke.
+        return reportCommand({
+          db: executor,
+          repos,
+          site: config.site,
+          anonymize: !argv.includes('--no-anonymize'),
+          ...(outDir === undefined ? {} : { outDir }),
+          ...(sampleSize === undefined ? {} : { sampleSize: Number(sampleSize) }),
+          write,
+        });
+      }
       case 'retry-dlq': {
         return retryDlqCommand(queue, {
           site: config.site,
@@ -164,7 +180,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       }
       default: {
         process.stderr.write(
-          `unknown command "${config.command}". Known commands: crawl, dlq:list, retry-dlq\n`,
+          `unknown command "${config.command}". Known commands: crawl, dlq:list, retry-dlq, verify, report\n`,
         );
         return ExitCode.SANITY_FAILED;
       }
@@ -201,6 +217,7 @@ function usage(): string {
     '  crawl        crawl a site to completion, resuming any unfinished run',
     '  dlq:list     list the jobs that exhausted their retries',
     '  verify       run the sanity checks over the last run; exits 4 if any fail',
+    '  report       write reports/coverage.md, coverage.json, metrics.json and sample.md',
     '  retry-dlq    move dead jobs back to pending so the next crawl reprocesses them',
     '  version      print the version and exit',
     '',
@@ -214,6 +231,9 @@ function usage(): string {
     '  --max-jobs <n>         stop after n jobs, for a bounded demo',
     '  --kind <k>             narrow dlq:list / retry-dlq to search|detail|blob',
     '  --sample <n>           verify: re-query n leaves against the live site',
+    '                         report: how many cases to render in sample.md (default: 10)',
+    '  --out <dir>            report: where to write the files (default: reports)',
+    '  --no-anonymize         report: leave CPF/CNPJ unmasked; do not commit the result',
     '',
     'Configuration also reads the environment; see .env.example.',
   ].join('\n');

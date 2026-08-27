@@ -26,7 +26,8 @@
     "demo": "tsx src/app/main.ts crawl --root-start 2024-05-01 --root-end 2024-05-31 --pdf-budget 10",
     "dlq:list": "tsx src/app/main.ts dlq:list",
     "retry-dlq": "tsx src/app/main.ts retry-dlq",
-    "verify": "tsx src/app/main.ts verify"
+    "verify": "tsx src/app/main.ts verify",
+    "report": "tsx src/app/main.ts report"
   },
   "dependencyNotes": {
     "policy": "Runtime dependencies are fixed by the architecture and pinned to an exact version. Any addition must be pure JavaScript and justified here.",
