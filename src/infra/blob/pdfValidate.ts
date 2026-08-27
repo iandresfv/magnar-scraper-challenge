@@ -17,6 +17,8 @@
  *   4. A floor on size. A "PDF" of 200 bytes is an error page that happens to start correctly.
  */
 
+import { decodeLatin1 } from '../../shared/latin1.js';
+
 export type PdfRejection = 'NOT_PDF' | 'PDF_TRUNCATED' | 'PDF_TOO_SMALL' | 'PDF_LENGTH_MISMATCH';
 
 export interface PdfValidationOk {
@@ -98,5 +100,5 @@ export function validatePdf(input: PdfValidationInput): PdfValidation {
 }
 
 function latin1(bytes: Uint8Array): string {
-  return new TextDecoder('latin1').decode(bytes);
+  return decodeLatin1(bytes);
 }

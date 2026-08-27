@@ -23,7 +23,12 @@
  * indistinguishable from a day with no such cases.
  */
 
+import { decodeLatin1 } from '../../shared/latin1.js';
+
 export type Charset = 'utf-8' | 'iso-8859-1';
+
+// Re-exported because the transport's callers reason about decoding through this module.
+export { decodeLatin1 };
 
 export interface DecodeResult {
   text: string;
@@ -60,7 +65,7 @@ export function charsetFromHeaders(headers: Headers): Charset | null {
 
 /** Reads the declaration out of the first kilobyte, decoded as latin1 so it is always readable. */
 export function charsetFromDocument(bytes: Uint8Array): Charset | null {
-  const head = new TextDecoder('latin1').decode(bytes.subarray(0, 1024));
+  const head = decodeLatin1(bytes.subarray(0, 1024));
   const match = CHARSET_IN_DOCUMENT.exec(head);
   return normalizeCharset(match?.[1] ?? match?.[2]);
 }
@@ -77,26 +82,21 @@ export function decodeBody(bytes: Uint8Array, headers?: Headers): DecodeResult {
     // Not UTF-8. Now a declaration is worth consulting.
   }
 
+  const decode = (charset: Charset): string =>
+    charset === 'utf-8' ? new TextDecoder('utf-8').decode(bytes) : decodeLatin1(bytes);
+
   const fromHeader = headers === undefined ? null : charsetFromHeaders(headers);
   if (fromHeader !== null) {
-    return { text: new TextDecoder(fromHeader).decode(bytes), charset: fromHeader, via: 'header' };
+    return { text: decode(fromHeader), charset: fromHeader, via: 'header' };
   }
 
   const fromDocument = charsetFromDocument(bytes);
   if (fromDocument !== null) {
-    return {
-      text: new TextDecoder(fromDocument).decode(bytes),
-      charset: fromDocument,
-      via: 'document',
-    };
+    return { text: decode(fromDocument), charset: fromDocument, via: 'document' };
   }
 
-  // 3. latin1 never throws: every byte maps to a code point. Last resort by construction.
-  return {
-    text: new TextDecoder('iso-8859-1').decode(bytes),
-    charset: 'iso-8859-1',
-    via: 'fallback-latin1',
-  };
+  // 3. latin1 never fails: every byte maps to a code point. Last resort by construction.
+  return { text: decodeLatin1(bytes), charset: 'iso-8859-1', via: 'fallback-latin1' };
 }
 
 /**

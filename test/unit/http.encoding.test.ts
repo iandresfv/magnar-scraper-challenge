@@ -6,6 +6,7 @@ import {
   charsetFromDocument,
   charsetFromHeaders,
   decodeBody,
+  decodeLatin1,
   formBodyBytes,
   urlencodeForm,
 } from '../../src/infra/http/encoding.js';
@@ -105,12 +106,35 @@ describe('decodeBody', () => {
   it('would produce mojibake if the declaration were believed blindly — the bug this prevents', () => {
     const bytes = utf8('APELAÇÃO');
     // What a naive "trust the header" implementation would do:
-    const naive = new TextDecoder('iso-8859-1').decode(bytes);
+    const naive = decodeLatin1(bytes);
     expect(detectMojibake(naive)).toBe(true);
     // What this module does instead:
     expect(detectMojibake(decodeBody(bytes, headers('text/html;charset=ISO-8859-1')).text)).toBe(
       false,
     );
+  });
+});
+
+describe('decodeLatin1', () => {
+  it('maps every byte to the code point of the same value, as ISO-8859-1 defines', () => {
+    const all = new Uint8Array(256).map((_, i) => i);
+    const text = decodeLatin1(all);
+    expect(text.length).toBe(256);
+    for (let i = 0; i < 256; i++) expect(text.codePointAt(i)).toBe(i);
+  });
+
+  it('does not follow the WHATWG alias of iso-8859-1 to windows-1252', () => {
+    // 0x87 is U+0087 in ISO-8859-1 and U+2021 (double dagger) in windows-1252. Which one a
+    // TextDecoder returns depends on how the runtime was built; this must not.
+    expect(decodeLatin1(new Uint8Array([0x87])).codePointAt(0)).toBe(0x87);
+    expect(decodeLatin1(new Uint8Array([0x80])).codePointAt(0)).toBe(0x80);
+  });
+
+  it('handles a body larger than the argument limit of String.fromCharCode', () => {
+    const big = new Uint8Array(200_000).fill(0xe7);
+    const text = decodeLatin1(big);
+    expect(text.length).toBe(200_000);
+    expect(text.codePointAt(199_999)).toBe(0xe7);
   });
 });
 
