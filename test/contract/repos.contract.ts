@@ -283,6 +283,9 @@ export function runReposContract(subject: ReposSubject): void {
         expect(children.documentos).toHaveLength(1);
         expect(children.advogados[0]?.registro).toEqual({ uf: 'RN', numero: '1966' });
         expect(children.partes[0]?.documento?.valid).toBe(true);
+        // Punctuation is not a column; it is re-derived, so what comes back equals what went in.
+        expect(children.partes[0]?.documento).toEqual(caseRecord().partes[0]?.documento);
+        expect(children.advogados[0]?.documento?.formatted).toBe('474.225.484-87');
       });
 
       it('reports unchanged on an identical detailed write — the reason a re-run is free', async () => {

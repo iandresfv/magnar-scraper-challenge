@@ -29,6 +29,7 @@ import type {
 import type { CaseRepo, Tx, UpsertOutcome } from '../../../core/ports/repos.js';
 import type { SqlExecutor, SqlSession } from '../../../core/ports/sql.js';
 import { normalizeCaseNumber, parseCaseNumber } from '../../../core/domain/cnj.js';
+import { parsePersonId } from '../../../core/domain/personId.js';
 import {
   readJson,
   readNumberOrNull,
@@ -435,13 +436,17 @@ export class PgCaseRepo implements CaseRepo {
 }
 
 function hydrateDocument(row: Record<string, unknown>): Party['documento'] {
-  const kind = readStringOrNull(row, 'doc_tipo');
+  const kind = readStringOrNull(row, 'doc_tipo') as NonNullable<Party['documento']>['kind'] | null;
   const digits = readStringOrNull(row, 'doc_digitos');
   if (kind === null) return null;
+  // Only the digits are stored: punctuation is derivable, and storing it would let the two
+  // disagree. So it is re-derived on the way out, which is what makes a party read back equal to
+  // the one that was written — including in `reports/sample.md`, which prints `formatted`.
+  const reparsed = digits === null ? null : parsePersonId(kind, digits);
   return {
-    kind: kind as NonNullable<Party['documento']>['kind'],
+    kind,
     digits,
-    formatted: digits ?? '***',
+    formatted: reparsed?.formatted ?? digits ?? '***',
     valid: (row['doc_valido'] as boolean | null | undefined) ?? null,
   };
 }
