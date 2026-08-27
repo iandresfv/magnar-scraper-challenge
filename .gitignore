@@ -1,0 +1,16 @@
+node_modules/
+dist/
+data/
+exports/
+.env
+.env.docker
+*.part
+coverage/
+.claude/
+*.log
+
+# Design material and prompts stay out of the repository. What must be published
+# is copied into docs/ by the stage that publishes it.
+context/
+
+.DS_Store

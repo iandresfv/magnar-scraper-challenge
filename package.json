@@ -1,0 +1,48 @@
+{
+  "name": "juris-scraper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-site judicial scraping engine. First site: PJe Consulta Publica of Brazil's TRF5.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run"
+  },
+  "dependencyNotes": {
+    "policy": "Runtime dependencies are fixed by the architecture and pinned to an exact version. Any addition must be pure JavaScript and justified here.",
+    "@aws-sdk/client-s3": "S3 API client. One interface reaches RustFS, AWS S3, GCS (HMAC interop) and Garage.",
+    "@electric-sql/pglite": "Postgres compiled to WASM. Same DDL and queries as the Docker Postgres, with no native build step, so the no-Docker path is a real Postgres.",
+    "cheerio": "HTML parsing. No JavaScript from the site is ever executed.",
+    "pg": "Postgres driver for the default path.",
+    "pino": "Structured NDJSON logging.",
+    "tough-cookie": "RFC 6265 cookie jar. The site pins a cluster node through cookie path scoping.",
+    "@eslint/js": "Dev only: the recommended rule set that eslint.config.js extends. Ships from the eslint project itself."
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1119.0",
+    "@electric-sql/pglite": "0.5.8",
+    "cheerio": "1.2.0",
+    "pg": "8.23.0",
+    "pino": "10.3.1",
+    "tough-cookie": "6.0.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.19.1",
+    "@types/pg": "8.23.1",
+    "eslint": "10.9.1",
+    "pino-pretty": "13.1.3",
+    "prettier": "3.9.6",
+    "tsx": "4.23.12",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.68.0",
+    "vitest": "4.1.11"
+  }
+}

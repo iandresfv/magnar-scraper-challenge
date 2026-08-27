@@ -1,0 +1,7 @@
+dist/
+node_modules/
+coverage/
+data/
+exports/
+context/
+src/sites/*/fixtures/
