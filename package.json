@@ -1,6 +1,6 @@
 {
   "name": "juris-scraper",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Multi-site judicial scraping engine. First site: PJe Consulta Publica of Brazil's TRF5.",
   "license": "MIT",

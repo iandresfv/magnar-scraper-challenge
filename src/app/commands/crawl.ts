@@ -43,6 +43,7 @@ import {
 } from '../../infra/http/throttledHttpClient.js';
 import { formatProgress, renderSummary, type ProgressSnapshot } from '../progress.js';
 import type { Config } from '../config.js';
+import { resolveVersion } from '../version.js';
 
 export interface CrawlDeps {
   config: Config;
@@ -127,7 +128,9 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
         pdfBudget: config.crawl.pdfBudget,
         concurrency: config.throttle.concurrency,
       },
-      version: '0.1.0',
+      // Read from package.json, never duplicated here: a release bump must not leave a stale
+      // version stamped on the runs it produces.
+      version: resolveVersion(),
       exitCode: null,
       summary: null,
     });
