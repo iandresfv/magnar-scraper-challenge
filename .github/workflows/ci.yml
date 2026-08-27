@@ -129,16 +129,29 @@ jobs:
         run: npm run blob:init
 
   node20:
-    name: test on the minimum supported node
+    name: runtime on the minimum supported node
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          # package.json declares >=20.6 for `node --env-file`; CI proves it rather than
-          # asserting it. The AWS SDK warns about Node 20 here, which is expected and harmless.
+          # `engines.node` claims >=20.6, which is what `node --env-file` needs. This job proves
+          # that claim by building and *running* the CLI on exactly that version.
+          #
+          # It deliberately does not run the test suite: vitest 4 imports `styleText` from
+          # `node:util`, which arrived in 20.12. That is a constraint on the development
+          # toolchain, not on the shipped program, and conflating the two would either weaken
+          # the engines field to something untrue or force a dependency downgrade for no
+          # runtime benefit.
           node-version: '20.6'
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
+      - run: npm ci --ignore-scripts
+      - run: npx tsc -p tsconfig.build.json
+      - name: the built CLI runs and reports its version
+        run: |
+          output=$(node dist/app/main.js)
+          echo "$output"
+          echo "$output" | grep -qE '^juris-scraper [0-9]+\.[0-9]+\.[0-9]+'
+      - name: --env-file is supported, which is why the floor is 20.6
+        run: |
+          printf 'JURIS_PROBE=ok\n' > .env.probe
+          node --env-file=.env.probe -e 'if (process.env.JURIS_PROBE !== "ok") process.exit(1)'
