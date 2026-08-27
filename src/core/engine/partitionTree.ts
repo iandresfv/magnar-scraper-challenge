@@ -44,14 +44,34 @@ export interface TilingResult {
 }
 
 /**
- * Checks that `leaves` exactly tile `root`.
+ * Statuses in which a node with no facet filter accounts for its whole date range.
  *
- * Only **primary** leaves participate: a day split by class is still covered once by its primary
- * ancestor, and counting its children too would report a false overlap.
+ * `SPLIT_SECONDARY` belongs here and it is easy to miss: a day that was subdivided by class is
+ * still, in the date dimension, covered exactly once — by itself. Its class children carry a
+ * facet and are deliberately excluded, so leaving the parent out too would leave that day
+ * covered by nothing and report a phantom gap. `GAP` belongs here for a related reason: the
+ * range *was* queried, it simply could not be exhausted, and that incompleteness is reported on
+ * its own terms rather than as a hole in the calendar.
+ */
+export const COVERING_STATUSES: readonly PartitionStatus[] = [
+  'LEAF_DONE',
+  'GAP',
+  'SPLIT_SECONDARY',
+];
+
+export function coversItsRange(node: PartitionNode): boolean {
+  return Object.keys(node.facets).length === 0 && COVERING_STATUSES.includes(node.status);
+}
+
+/**
+ * Checks that the covering nodes exactly tile `root`.
+ *
+ * Only nodes with **no facet filter** participate: a day split by class is covered once by
+ * itself, and counting its children too would report a false overlap.
  */
 export function assertTiling(leaves: readonly PartitionNode[], root: DateRange): TilingResult {
   const primary = leaves
-    .filter((node) => Object.keys(node.facets).length === 0)
+    .filter(coversItsRange)
     .sort((a, b) => compareIsoDate(a.range.ini, b.range.ini));
 
   const rootDays = daysInRange(root);

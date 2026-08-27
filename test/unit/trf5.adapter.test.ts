@@ -293,14 +293,16 @@ describe('partition axes', () => {
     expect(dateAxis.canSplit(day, page([]), ctx())).toBe(false);
   });
 
-  it('the class axis takes over on a single day and adds a residual node', () => {
+  it('the class axis takes over on a single day, one child per known class', () => {
     const day = node({ range: { ini: '2024-05-15', fim: '2024-05-15' } });
     const context = ctx(['APELAÇÃO CÍVEL', 'AGRAVO DE INSTRUMENTO']);
     expect(classeAxis.canSplit(day, page([]), context)).toBe(true);
 
     const children = classeAxis.split(day, page([]), context);
-    expect(children).toHaveLength(3);
-    expect(children.map((c) => c.facets['classe'])).toContain(RESIDUAL_VALUE);
+    expect(children).toHaveLength(2);
+    // Deliberately no extra "residual" child: re-asking the same day with no filter returns the
+    // same truncated answer the parent already had. See the note in axes.ts.
+    expect(children.map((c) => c.facets['classe'])).not.toContain(RESIDUAL_VALUE);
     expect(children.every((c) => c.range.ini === '2024-05-15')).toBe(true);
   });
 

@@ -29,9 +29,22 @@ import { foldForComparison } from '../../core/domain/text.js';
 export const CLASSE_FACET = 'classe';
 
 /**
- * The node that catches whatever the known classes did not explain. It is queried with no class
- * filter and exists so the report can say "these rows were visible but unattributed" instead of
- * pretending the day was covered.
+ * DECISIÓN LOCAL: the design called for an extra "residual" child that re-queries the day with
+ * **no** class filter, so its count could be compared against the sum of the per-class counts.
+ * That child is not built, for a reason that only shows up once it runs: an unfiltered query for
+ * a day the parent already found truncated returns *the same truncated answer* — thirty rows and
+ * a banner. It adds no information, costs one request per overflowing day (half of them, per the
+ * phase-0 spike), and, worse, is itself un-splittable and would resolve as a spurious `GAP`
+ * beside the real one.
+ *
+ * The arithmetic it existed to enable is done instead against the parent's own observed row
+ * count, which is already known and already stored — see `closeFacetSplit` in the coverage
+ * engine. Nothing is lost: a day whose known classes do not account for what the parent showed
+ * is still reported as incomplete, with the same numbers.
+ *
+ * The constant survives so that a node carrying it — from an older run, or from a future axis
+ * that genuinely needs an unfiltered probe — is still understood by the adapter and answered
+ * without a class filter.
  */
 export const RESIDUAL_VALUE = '__RESIDUAL__';
 
@@ -63,15 +76,9 @@ export const classeAxis: Axis = {
 
   split(node, page, ctx) {
     const classes = classesFor(page, ctx);
-    const children = classes.map((value) =>
+    return classes.map((value) =>
       childNode(node, node.range, { ...node.facets, [CLASSE_FACET]: value }, ctx),
     );
-    // The residual node re-asks the same day with no filter. Its row count is what the
-    // arithmetic compares against the sum of the per-class counts.
-    children.push(
-      childNode(node, node.range, { ...node.facets, [CLASSE_FACET]: RESIDUAL_VALUE }, ctx),
-    );
-    return children;
   },
 };
 

@@ -124,11 +124,15 @@ export class PgPartitionRepo implements PartitionRepo {
   }
 
   async primaryLeaves(runId: string): Promise<PartitionNode[]> {
-    // Only the primary tiling is expected to be gapless; secondary leaves subdivide a day that
-    // is already covered by exactly one primary leaf.
+    // The nodes that account for their whole date range: resolved leaves, declared gaps, and
+    // days that were subdivided by class (those are still covered once, by themselves). Must
+    // match COVERING_STATUSES in the engine, or the tiling check and the database would be
+    // arguing about different sets.
     const { rows } = await this.db.query(
       `SELECT * FROM juris.partition
-       WHERE run_id = $1 AND status IN ('LEAF_DONE','GAP') AND facets = '{}'::jsonb
+       WHERE run_id = $1
+         AND status IN ('LEAF_DONE','GAP','SPLIT_SECONDARY')
+         AND facets = '{}'::jsonb
        ORDER BY data_ini`,
       [runId],
     );
