@@ -60,10 +60,16 @@ export interface FakePjeOptions {
   cap?: number;
   /** Emit the truncation banner. Turned off to prove a full page still forces a split. */
   emitBanner?: boolean;
+  /** Fixed port. Zero — the default — lets the OS pick one, which is what tests want. */
+  port?: number;
+  /** Interface to bind. Loopback by default; a container has to bind all of them. */
+  host?: string;
 }
 
 export interface FakePjeServer {
   url: string;
+  /** The port actually bound, which matters when the requested one was zero. */
+  port: number;
   dataset: Dataset;
   /** How many requests have been served, by path kind. */
   counts: Record<string, number>;
@@ -226,11 +232,13 @@ export async function startFakePje(options: FakePjeOptions = {}): Promise<FakePj
     res.end('not found');
   }
 
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const host = options.host ?? '127.0.0.1';
+  await new Promise<void>((resolve) => server.listen(options.port ?? 0, host, resolve));
   const address = server.address() as AddressInfo;
 
   return {
-    url: `http://127.0.0.1:${String(address.port)}`,
+    url: `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${String(address.port)}`,
+    port: address.port,
     dataset,
     counts,
     inject: (fault) => {

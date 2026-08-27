@@ -9,12 +9,15 @@
     "node": ">=20.6"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && cp -R src/infra/db/migrations dist/infra/db/migrations",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "up": "docker compose up -d --wait db blob",
     "up:infra": "docker compose up -d --wait db blob",
+    "up:full": "docker compose --profile app up --build",
+    "scale": "sh scripts/scale-demo.sh",
     "down": "docker compose down",
     "nuke": "docker compose down -v --remove-orphans",
     "db:migrate": "tsx src/app/cli/dbMigrate.entry.ts",
