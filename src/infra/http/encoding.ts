@@ -24,11 +24,15 @@
  */
 
 import { decodeLatin1 } from '../../shared/latin1.js';
+import { formBodyBytes, urlencodeForm, type EncodedForm } from '../../shared/form.js';
 
 export type Charset = 'utf-8' | 'iso-8859-1';
 
-// Re-exported because the transport's callers reason about decoding through this module.
-export { decodeLatin1 };
+// Re-exported because the transport's callers reason about encoding through this module. The
+// implementations live in shared/ so that sites/ can use them without reaching into infra/ —
+// the hexagonal test caught exactly that when the TRF5 form builder needed them.
+export { decodeLatin1, formBodyBytes, urlencodeForm };
+export type { EncodedForm };
 
 export interface DecodeResult {
   text: string;
@@ -97,66 +101,4 @@ export function decodeBody(bytes: Uint8Array, headers?: Headers): DecodeResult {
 
   // 3. latin1 never fails: every byte maps to a code point. Last resort by construction.
   return { text: decodeLatin1(bytes), charset: 'iso-8859-1', via: 'fallback-latin1' };
-}
-
-/**
- * Percent-encode a form body in a given charset.
- *
- * `URLSearchParams` is not usable here: it always emits UTF-8, with no way to ask for anything
- * else. For an ISO-8859-1 form that turns `Ç` into `%C3%87`, which the server decodes as two
- * latin1 characters and matches against nothing.
- *
- * Characters above U+00FF cannot be represented in latin1 at all. Rather than dropping them or
- * emitting a replacement byte, they are sent as UTF-8 percent-encoding — a best effort that is
- * at least recoverable, and flagged by `unrepresentable` so the caller can log it. The site's
- * own vocabulary is entirely within latin1, so this path should stay empty.
- */
-export interface EncodedForm {
-  body: string;
-  contentType: string;
-  unrepresentable: string[];
-}
-
-const UNRESERVED = /[A-Za-z0-9*\-._]/;
-
-export function urlencodeForm(
-  fields: Record<string, string>,
-  charset: Charset = 'utf-8',
-): EncodedForm {
-  if (charset === 'utf-8') {
-    return {
-      body: new URLSearchParams(fields).toString(),
-      contentType: 'application/x-www-form-urlencoded',
-      unrepresentable: [],
-    };
-  }
-
-  const unrepresentable: string[] = [];
-  const encode = (value: string): string => {
-    let out = '';
-    for (const ch of value) {
-      const code = ch.codePointAt(0) ?? 0;
-      if (UNRESERVED.test(ch)) out += ch;
-      else if (ch === ' ') out += '+';
-      else if (code <= 0xff) out += `%${code.toString(16).toUpperCase().padStart(2, '0')}`;
-      else {
-        unrepresentable.push(ch);
-        out += encodeURIComponent(ch);
-      }
-    }
-    return out;
-  };
-
-  return {
-    body: Object.entries(fields)
-      .map(([key, value]) => `${encode(key)}=${encode(value)}`)
-      .join('&'),
-    contentType: 'application/x-www-form-urlencoded;charset=ISO-8859-1',
-    unrepresentable,
-  };
-}
-
-/** The bytes of an encoded form body. Always ASCII after percent-encoding. */
-export function formBodyBytes(form: EncodedForm): Uint8Array {
-  return new TextEncoder().encode(form.body);
 }
