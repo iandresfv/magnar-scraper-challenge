@@ -216,6 +216,45 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
 
     const reaped = await queue.reapExpiredLeases(site);
     if (reaped > 0) log(`recovered ${String(reaped)} job(s) from workers that did not finish`);
+
+    // Documents left over from an earlier run, whose budget ran out before they were fetched.
+    //
+    // Without this, raising `--pdf-budget` on a resumed run would change nothing: the cases are
+    // already detailed, so no detail job runs, so no blob job is ever enqueued, and the pending
+    // documents stay pending forever. `--pdf-budget all` is documented as the way to finish the
+    // job, and this is what makes that true.
+    if (deps.store !== undefined) {
+      const pending: {
+        site: string;
+        kind: 'blob';
+        key: string;
+        payload: Record<string, unknown>;
+      }[] = [];
+      for await (const blob of repos.blobs.stream({ site, state: 'PENDING' })) {
+        const granted = reserveBlobs(1);
+        if (granted === 0) break;
+        pending.push({
+          site,
+          kind: 'blob',
+          key: `blob:${blob.key}`,
+          payload: {
+            request: {
+              site: blob.site,
+              key: blob.key,
+              idOrigem: blob.idOrigem,
+              idDoc: blob.idDoc,
+              tipo: blob.tipo,
+              url: blob.sourceUrl,
+              needsSession: true,
+            },
+          },
+        });
+      }
+      const requeued = await queue.enqueue(pending);
+      if (requeued > 0) {
+        log(`queued ${String(requeued)} document(s) left pending by an earlier run`);
+      }
+    }
   }
 
   // ── worker: the loop ──────────────────────────────────────────────────────
