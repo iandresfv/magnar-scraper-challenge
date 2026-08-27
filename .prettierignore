@@ -7,3 +7,5 @@ context/
 src/sites/*/fixtures/
 # Copia literal de la guía de lectura: reformatearla la haría dejar de serlo.
 docs/GUIDE.md
+# Salida del comando `report`: se publica tal cual la emite, no como la querría un formateador.
+reports/

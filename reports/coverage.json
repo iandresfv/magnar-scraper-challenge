@@ -1,0 +1,120 @@
+{
+  "generatedAt": "2026-08-27T22:11:41.428Z",
+  "site": "br-trf5",
+  "runId": "5c3d628e-f4eb-4d13-8b5e-3ef1176e2838",
+  "root": {
+    "ini": "2024-05-01",
+    "fim": "2024-05-31"
+  },
+  "partitions": {
+    "total": 68,
+    "leaves": 26,
+    "secondaryLeaves": 15,
+    "gaps": 0,
+    "split": 27
+  },
+  "tiling": {
+    "ok": true,
+    "coveredDays": 31,
+    "rootDays": 31,
+    "violations": []
+  },
+  "cases": {
+    "LISTED": 0,
+    "DETAILED": 501,
+    "DETAIL_FAILED": 59
+  },
+  "documents": {
+    "PENDING": 3645,
+    "STORED": 310,
+    "FAILED": 0,
+    "SKIPPED": 0
+  },
+  "byMonth": [
+    {
+      "yearMonth": "2024-05",
+      "cases": 560,
+      "leaves": 27
+    }
+  ],
+  "gapDetail": [],
+  "checks": [
+    {
+      "id": "S-1",
+      "title": "the resolved partitions tile the root exactly",
+      "severity": "error",
+      "ok": true,
+      "detail": "27 leaves cover 31 of 31 days"
+    },
+    {
+      "id": "S-2",
+      "title": "no partition was left unexhausted",
+      "severity": "error",
+      "ok": true,
+      "detail": "every partition resolved under the cap"
+    },
+    {
+      "id": "S-3",
+      "title": "every stored case was actually seen in a result page",
+      "severity": "error",
+      "ok": true,
+      "detail": "560 row(s) observed across partitions, 560 distinct case(s) stored"
+    },
+    {
+      "id": "S-4",
+      "title": "every case number is well formed",
+      "severity": "error",
+      "ok": true,
+      "detail": "560 case number(s) parse"
+    },
+    {
+      "id": "S-5",
+      "title": "case number check digits validate",
+      "severity": "warn",
+      "ok": true,
+      "detail": "1 of 560 fail the mod-97 check, e.g. 0003841-02.2015.8.06.0167"
+    },
+    {
+      "id": "S-6",
+      "title": "no stored text carries a mojibake signature",
+      "severity": "error",
+      "ok": true,
+      "detail": "560 case(s) checked, all clean"
+    },
+    {
+      "id": "S-7",
+      "title": "fields are populated at the expected rate",
+      "severity": "warn",
+      "ok": true,
+      "detail": "every field is within its expected null rate"
+    },
+    {
+      "id": "S-8",
+      "title": "dates are internally consistent",
+      "severity": "warn",
+      "ok": true,
+      "detail": "20 case(s) whose distribution date falls outside the partition that listed them; 0 movement(s) dated in the future"
+    },
+    {
+      "id": "S-9",
+      "title": "detailed cases have parties",
+      "severity": "warn",
+      "ok": true,
+      "detail": "0 of 501 detailed case(s) have no party at all"
+    },
+    {
+      "id": "S-10",
+      "title": "every stored document has a location, a hash and a plausible size",
+      "severity": "error",
+      "ok": true,
+      "detail": "310 document(s) stored, all with a uri, a hash and a size"
+    },
+    {
+      "id": "S-11",
+      "title": "nothing was abandoned",
+      "severity": "warn",
+      "ok": false,
+      "detail": "59 job(s) exhausted their retries; see npm run dlq:list"
+    }
+  ]
+}

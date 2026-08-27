@@ -560,6 +560,39 @@ Los expedientes son públicos, pero contienen nombres, CPF y CNPJ.
 - Rastrear décadas a 2 req/s significa días de tráfico continuo contra un servidor público. Ver el
   punto anterior sobre ética: no se hizo, y la razón está escrita aquí en vez de disimulada.
 
+### Qué salió del run publicado
+
+Los cuatro archivos de [`reports/`](reports/) son la salida real de esa corrida, no un ejemplo:
+
+|                      |                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------- |
+| Rango raíz           | 2024-05-01 .. 2024-05-31 (31 días)                                                        |
+| Teselado             | 31 de 31 días cubiertos, sin huecos ni solapes                                            |
+| Particiones          | 26 hojas primarias + 15 hojas por clase judicial · 27 divisiones · **0 GAP**              |
+| Expedientes          | 560 encontrados, 501 con detalle completo                                                 |
+| Documentos           | 310 PDF almacenados de 3.955 conocidos (presupuesto, no fallo)                            |
+| `verify --sample 25` | 10/11 en verde, 1 aviso; 25 hojas re-consultadas contra el sitio vivo, **ninguna cambió** |
+| Código de salida     | `1` — quedan jobs en la DLQ                                                               |
+
+**La DLQ no está vacía, y es correcto que no lo esté.** Contiene 59 jobs `detail`, todos con la
+misma firma: un 302 a `errorUnexpected.seam`. Es un expediente que el propio PJe no consigue
+renderizar —el hallazgo (j) del [spike de la Fase 0](docs/spike-fase0.md), donde uno de cada cinco
+tokens muestreados hizo lo mismo mientras sus vecinos de la misma respuesta funcionaban—. El
+clasificador lo trata como `CLIENT_ERROR` **no reintentable** a propósito: reintentarlo seis veces
+y renovar la sesión no lo arreglaría, sólo gastaría peticiones contra un tribunal. El expediente
+queda marcado `DETAIL_FAILED` con su fila de búsqueda intacta, y la tasa —59 de 560, un 10,5%—
+se publica en vez de esconderse. La alternativa, descartada, era descartar esos expedientes: un
+scraper que borra lo que no puede leer miente sobre su propia cobertura.
+
+Dos comprobaciones salieron en verde **con reservas visibles**, que es como están diseñadas:
+
+- S-5: 1 número de 560 no valida su dígito verificador (`0003841-02.2015.8.06.0167`, un número de
+  tribunal estatal citado como referencia). El tribunal es la fuente de verdad; la comprobación
+  es de severidad `warn` con tolerancia del 1%, porque un scraper que descartara las filas que no
+  le gustan sería peor que uno que las señala.
+- S-8: 20 de 560 tienen fecha de distribución fuera de la partición que los listó (tolerancia 5%).
+  El sitio filtra por fecha de autuação y muestra la de distribución: no siempre coinciden.
+
 ### Supuestos que el código vigila
 
 Cada supuesto sobre el sitio tiene un canario que lo mata si deja de ser cierto (§8). Los más

@@ -1,0 +1,118 @@
+{
+  "runId": "5c3d628e-f4eb-4d13-8b5e-3ef1176e2838",
+  "samples": [
+    {
+      "name": "juris_blobs_total",
+      "labels": {
+        "site": "br-trf5",
+        "state": "PENDING"
+      },
+      "value": 3645,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_blobs_total",
+      "labels": {
+        "site": "br-trf5",
+        "state": "SKIPPED"
+      },
+      "value": 0,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_blobs_total",
+      "labels": {
+        "site": "br-trf5",
+        "state": "FAILED"
+      },
+      "value": 0,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_blobs_total",
+      "labels": {
+        "site": "br-trf5",
+        "state": "STORED"
+      },
+      "value": 310,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_cases_total",
+      "labels": {
+        "site": "br-trf5",
+        "state": "LISTED"
+      },
+      "value": 0,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_cases_total",
+      "labels": {
+        "site": "br-trf5",
+        "state": "DETAILED"
+      },
+      "value": 501,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_cases_total",
+      "labels": {
+        "site": "br-trf5",
+        "state": "DETAIL_FAILED"
+      },
+      "value": 59,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_http_request_duration_ms",
+      "labels": {
+        "kind": "detail"
+      },
+      "value": 1,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_http_request_duration_ms",
+      "labels": {
+        "kind": "blob"
+      },
+      "value": 150,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_jobs_dead",
+      "labels": {
+        "site": "br-trf5"
+      },
+      "value": 59,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_jobs_pending",
+      "labels": {
+        "site": "br-trf5"
+      },
+      "value": 0,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_jobs_total",
+      "labels": {
+        "kind": "blob",
+        "outcome": "done"
+      },
+      "value": 150,
+      "at": "2026-08-27T22:10:36.321Z"
+    },
+    {
+      "name": "juris_jobs_total",
+      "labels": {
+        "kind": "detail",
+        "outcome": "done"
+      },
+      "value": 1,
+      "at": "2026-08-27T22:10:36.321Z"
+    }
+  ]
+}
