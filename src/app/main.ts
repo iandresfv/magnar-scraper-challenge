@@ -31,6 +31,7 @@ import { exportCommand, type ExportFormat } from './commands/export.js';
 import { healthcheckCommand } from './commands/healthcheck.js';
 import { ConfigError, resolveConfig, type Config } from './config.js';
 import { createSite } from './registry.js';
+import type { SiteAdapter } from '../core/ports/siteAdapter.js';
 import { resolveVersion } from './version.js';
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
@@ -91,13 +92,17 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       if (applied.length > 0) write(`applied ${String(applied.length)} migration(s)`);
     }
 
+    // Every command below is `return await`, never `return`. In an async function a bare
+    // `return promise` runs the `finally` first — closing the database — and only then adopts the
+    // promise, which can no longer complete. That is a process that exits 13 with no output.
     const repos = createRepos(executor);
     const queue = new PgJobQueue(executor, { defaultLeaseMs: config.crawl.leaseMs });
     const http = new FetchHttpClient();
-    const adapter = createSite(
-      config.site,
-      config.baseUrl === undefined ? {} : { baseUrl: config.baseUrl },
-    );
+    // Built on demand, not up front: `verify`, `report`, `export` and the queue commands read the
+    // database and touch no site at all. Constructing an adapter for them would make a purely
+    // local command fail for want of a base url it was never going to use.
+    const siteAdapter = (): SiteAdapter =>
+      createSite(config.site, config.baseUrl === undefined ? {} : { baseUrl: config.baseUrl });
 
     switch (config.command) {
       case 'crawl': {
@@ -129,7 +134,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
             store: blob.store,
             metrics,
             config,
-            adapter,
+            adapter: siteAdapter(),
             http,
             db: executor,
             repos,
@@ -144,7 +149,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       }
       case 'dlq:list':
       case 'dlq-list': {
-        return dlqListCommand(queue, {
+        return await dlqListCommand(queue, {
           site: config.site,
           kind: jobKindOf(argv),
           write,
@@ -152,12 +157,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       }
       case 'verify': {
         const sample = Number(flagValue(argv, '--sample') ?? '0');
-        return verifyCommand({
+        return await verifyCommand({
           db: executor,
           repos,
           site: config.site,
           sample,
-          ...(sample > 0 ? { adapter, http } : {}),
+          ...(sample > 0 ? { adapter: siteAdapter(), http } : {}),
           write,
         });
       }
@@ -166,7 +171,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         const sampleSize = flagValue(argv, '--sample');
         // `--no-anonymize` has to be asked for explicitly: the default writes a file that is safe
         // to commit, and the unsafe variant should be a deliberate keystroke.
-        return reportCommand({
+        return await reportCommand({
           db: executor,
           repos,
           site: config.site,
@@ -196,10 +201,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         return result.exitCode;
       }
       case 'healthcheck': {
-        return healthcheckCommand({ db: executor, metricsPort: config.metricsPort, write });
+        return await healthcheckCommand({ db: executor, metricsPort: config.metricsPort, write });
       }
       case 'retry-dlq': {
-        return retryDlqCommand(queue, {
+        return await retryDlqCommand(queue, {
           site: config.site,
           kind: jobKindOf(argv),
           write,
