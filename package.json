@@ -28,7 +28,8 @@
     "retry-dlq": "tsx src/app/main.ts retry-dlq",
     "verify": "tsx src/app/main.ts verify",
     "report": "tsx src/app/main.ts report",
-    "export": "tsx src/app/main.ts export"
+    "export": "tsx src/app/main.ts export",
+    "healthcheck": "tsx src/app/main.ts healthcheck"
   },
   "dependencyNotes": {
     "policy": "Runtime dependencies are fixed by the architecture and pinned to an exact version. Any addition must be pure JavaScript and justified here.",

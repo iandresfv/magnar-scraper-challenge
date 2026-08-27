@@ -28,6 +28,7 @@ import { dlqListCommand, retryDlqCommand } from './commands/dlq.js';
 import { verifyCommand } from './commands/verify.js';
 import { reportCommand } from './commands/report.js';
 import { exportCommand, type ExportFormat } from './commands/export.js';
+import { healthcheckCommand } from './commands/healthcheck.js';
 import { ConfigError, resolveConfig, type Config } from './config.js';
 import { createSite } from './registry.js';
 import { resolveVersion } from './version.js';
@@ -84,7 +85,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   process.on('SIGTERM', onSignal);
 
   try {
-    if (config.db.autoMigrate) {
+    // The healthcheck never migrates: a probe that repairs the thing it measures always passes.
+    if (config.db.autoMigrate && config.command !== 'healthcheck') {
       const { applied } = await migrate(executor);
       if (applied.length > 0) write(`applied ${String(applied.length)} migration(s)`);
     }
@@ -193,6 +195,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         });
         return result.exitCode;
       }
+      case 'healthcheck': {
+        return healthcheckCommand({ db: executor, metricsPort: config.metricsPort, write });
+      }
       case 'retry-dlq': {
         return retryDlqCommand(queue, {
           site: config.site,
@@ -202,7 +207,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       }
       default: {
         process.stderr.write(
-          `unknown command "${config.command}". Known commands: crawl, dlq:list, retry-dlq, verify, report, export\n`,
+          `unknown command "${config.command}". Known commands: crawl, dlq:list, retry-dlq, verify, report, export, healthcheck\n`,
         );
         return ExitCode.SANITY_FAILED;
       }
@@ -242,6 +247,7 @@ function usage(): string {
     '  report       write reports/coverage.md, coverage.json, metrics.json and sample.md',
     '  export       write one jsonl or csv file per entity into exports/',
     '  retry-dlq    move dead jobs back to pending so the next crawl reprocesses them',
+    '  healthcheck  probe the database (and /healthz); exits 4 when unhealthy',
     '  version      print the version and exit',
     '',
     'Options:',

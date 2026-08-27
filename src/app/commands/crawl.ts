@@ -31,16 +31,17 @@ import type { Repos } from '../../core/ports/repos.js';
 import type { SqlExecutor } from '../../core/ports/sql.js';
 import type { HttpPort } from '../../core/ports/http.js';
 import type { Throttle } from '../../core/ports/throttle.js';
-import { BreakerAbort } from '../../core/ports/throttle.js';
 import type { BlobStore } from '../../core/ports/blobStore.js';
 import type { SiteAdapter, SiteSession } from '../../core/ports/siteAdapter.js';
 import { SiteChangedError } from '../../core/ports/siteAdapter.js';
 import { validatePdf } from '../../infra/blob/pdfValidate.js';
 import { METRICS, MetricsRegistry } from '../../infra/metrics/registry.js';
+import { BreakerAbort } from '../../core/ports/throttle.js';
 import {
   ThrottledHttpClient,
   type ThrottledHttpOptions,
 } from '../../infra/http/throttledHttpClient.js';
+import { formatProgress, renderSummary, type ProgressSnapshot } from '../progress.js';
 import type { Config } from '../config.js';
 
 export interface CrawlDeps {
@@ -86,6 +87,7 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
       process.stdout.write(`${line}\n`);
     });
   const site = adapter.descriptor.id;
+  const runStartedAt = Date.now();
   const http =
     deps.throttle === undefined
       ? deps.http
@@ -395,7 +397,7 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
       if (Date.now() - lastProgress >= progressEvery) {
         lastProgress = Date.now();
         await publishGauges(site, repos, queue, metrics);
-        log(await progressLine(site, repos, queue));
+        log(formatProgress(await snapshot(site, repos, queue, jobsRun, Date.now() - runStartedAt)));
       }
     }
   }
@@ -433,11 +435,17 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
     config.crawl.maxJobs === null;
   if (finished) await repos.runs.finish(runId, { exitCode, summary });
 
-  log(await progressLine(site, repos, queue));
-  log(
-    `run ${runId} ${finished ? 'finished' : 'paused'} with exit code ${String(exitCode)} ` +
-      `after ${String(jobsRun)} job(s)`,
-  );
+  for (const line of renderSummary({
+    ...(await snapshot(site, repos, queue, jobsRun, Date.now() - runStartedAt)),
+    runId,
+    site,
+    exitCode,
+    finished,
+    gaps: gaps.length,
+    canary,
+  })) {
+    log(line);
+  }
 
   return { runId, exitCode, jobsRun, gaps, canary, stats };
 }
@@ -460,18 +468,20 @@ async function publishGauges(
   for (const [state, n] of Object.entries(blobs)) metrics.gauge(METRICS.blobs, n, { site, state });
 }
 
-async function progressLine(site: string, repos: Repos, queue: JobQueue): Promise<string> {
+/** One read of the three counters the progress line and the summary are both built from. */
+async function snapshot(
+  site: string,
+  repos: Repos,
+  queue: JobQueue,
+  jobsRun: number,
+  elapsedMs: number,
+): Promise<ProgressSnapshot> {
   const [stats, cases, blobs] = await Promise.all([
     queue.stats(site),
     repos.cases.countByState(site),
     repos.blobs.countByState(site),
   ]);
-  return (
-    `jobs ${String(stats.done)} done · ${String(stats.pending)} pending · ${String(stats.dead)} dead` +
-    ` · cases ${String((cases['LISTED'] ?? 0) + (cases['DETAILED'] ?? 0))}` +
-    ` (${String(cases['DETAILED'] ?? 0)} detailed)` +
-    ` · pdfs ${String(blobs['STORED'] ?? 0)}/${String((blobs['STORED'] ?? 0) + (blobs['PENDING'] ?? 0))}`
-  );
+  return { queue: stats, cases, blobs, jobsRun, elapsedMs };
 }
 
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
