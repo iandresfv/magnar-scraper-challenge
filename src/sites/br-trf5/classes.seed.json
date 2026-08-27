@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "Vocabulario semilla de classeJudicial para br-trf5.",
+    "Cosechado por scripts/spike-fase0.ts el 2026-08-27 sobre 18 dias repartidos entre 2024 y 2026",
+    "(33 peticiones en total). No es exhaustivo y no pretende serlo: el crawler sigue cosechando",
+    "toda clase que vea en cualquier fila y la persiste en juris.class_vocabulary. Esta semilla",
+    "solo evita que el primer dia desbordado tenga que descubrirlas desde cero.",
+    "El filtro del sitio es por PREFIJO e insensible a acentos (docs/spike-fase0.md 5), asi que",
+    "una clase que sea prefijo de otra sobre-matchea; 'prefixCollisions' registra las que lo son."
+  ],
+  "site": "br-trf5",
+  "facet": "classe",
+  "harvestedAt": "2026-08-27",
+  "source": "scripts/spike-fase0.ts --harvest-days 18",
+  "prefixCollisions": [],
+  "values": [
+    "AGRAVO DE INSTRUMENTO",
+    "AGRAVO INTERNO CÍVEL",
+    "AGRAVO REGIMENTAL CÍVEL",
+    "APELAÇÃO / REMESSA NECESSÁRIA",
+    "APELAÇÃO CRIMINAL",
+    "APELAÇÃO CÍVEL",
+    "AÇÃO PENAL - PROCEDIMENTO ORDINÁRIO",
+    "AÇÃO RESCISÓRIA",
+    "CONFLITO DE COMPETÊNCIA CÍVEL",
+    "CONFLITO DE JURISDIÇÃO",
+    "HABEAS CORPUS CRIMINAL",
+    "MANDADO DE SEGURANÇA CÍVEL",
+    "PEDIDO DE EFEITO SUSPENSIVO À APELAÇÃO",
+    "PEDIDO DE UNIFORMIZAÇÃO DE INTERPRETAÇÃO DE LEI CÍVEL",
+    "PROCEDIMENTO COMUM CÍVEL",
+    "PROCEDIMENTO INVESTIGATÓRIO CRIMINAL (PIC-MP)",
+    "RECLAMAÇÃO",
+    "RECURSO EM SENTIDO ESTRITO",
+    "REMESSA NECESSÁRIA CÍVEL",
+    "TUTELA ANTECIPADA ANTECEDENTE"
+  ]
+}
