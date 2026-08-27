@@ -24,6 +24,7 @@ import { MetricsRegistry } from '../infra/metrics/registry.js';
 import { startMetricsServer } from '../infra/metrics/server.js';
 import { crawlCommand } from './commands/crawl.js';
 import { dlqListCommand, retryDlqCommand } from './commands/dlq.js';
+import { verifyCommand } from './commands/verify.js';
 import { ConfigError, resolveConfig, type Config } from './config.js';
 import { createSite } from './registry.js';
 import { resolveVersion } from './version.js';
@@ -143,6 +144,17 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           write,
         });
       }
+      case 'verify': {
+        const sample = Number(flagValue(argv, '--sample') ?? '0');
+        return verifyCommand({
+          db: executor,
+          repos,
+          site: config.site,
+          sample,
+          ...(sample > 0 ? { adapter, http } : {}),
+          write,
+        });
+      }
       case 'retry-dlq': {
         return retryDlqCommand(queue, {
           site: config.site,
@@ -164,6 +176,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   }
 }
 
+/** Reads a `--flag value` pair out of the raw argv. */
+function flagValue(argv: readonly string[], flag: string): string | undefined {
+  const index = argv.indexOf(flag);
+  return index === -1 ? undefined : argv[index + 1];
+}
+
 /** `--kind blob` narrows the DLQ commands to one sort of work. */
 function jobKindOf(argv: readonly string[]): JobKind | undefined {
   const index = argv.indexOf('--kind');
@@ -182,6 +200,7 @@ function usage(): string {
     'Commands:',
     '  crawl        crawl a site to completion, resuming any unfinished run',
     '  dlq:list     list the jobs that exhausted their retries',
+    '  verify       run the sanity checks over the last run; exits 4 if any fail',
     '  retry-dlq    move dead jobs back to pending so the next crawl reprocesses them',
     '  version      print the version and exit',
     '',
@@ -194,6 +213,7 @@ function usage(): string {
     '  --pdf-budget <n|all>   how many PDFs this run may fetch (default: 150)',
     '  --max-jobs <n>         stop after n jobs, for a bounded demo',
     '  --kind <k>             narrow dlq:list / retry-dlq to search|detail|blob',
+    '  --sample <n>           verify: re-query n leaves against the live site',
     '',
     'Configuration also reads the environment; see .env.example.',
   ].join('\n');
