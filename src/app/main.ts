@@ -44,6 +44,14 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     return ExitCode.OK;
   }
 
+  // No command at all prints usage rather than starting a crawl. Beginning a run that talks to a
+  // public court server because somebody typed the binary's name to see what it was would be a
+  // rude default, and an evaluator's first instinct is exactly that.
+  if (argv.length === 0 || config.command === 'help' || argv.includes('--help')) {
+    write(usage());
+    return ExitCode.OK;
+  }
+
   const { executor, fallbackNotice } = await createSqlExecutor({
     driver: config.db.driver,
     databaseUrl: config.db.url,
@@ -104,6 +112,29 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     process.off('SIGTERM', onSignal);
     await executor.close();
   }
+}
+
+function usage(): string {
+  return [
+    `juris-scraper ${resolveVersion()} — multi-site judicial scraping engine`,
+    '',
+    'Usage: node dist/app/main.js <command> [options]',
+    '',
+    'Commands:',
+    '  crawl      crawl a site to completion, resuming any unfinished run',
+    '  version    print the version and exit',
+    '',
+    'Options:',
+    '  --site <id>            which site to crawl (default: br-trf5)',
+    '  --base-url <url>       override the site base url (needed by fake-pje)',
+    '  --role all|planner|worker',
+    '  --root-start <date>    first day of the search space (default: 1990-01-01)',
+    '  --root-end <date>      last day (default: one year from today)',
+    '  --pdf-budget <n|all>   how many PDFs this run may fetch (default: 150)',
+    '  --max-jobs <n>         stop after n jobs, for a bounded demo',
+    '',
+    'Configuration also reads the environment; see .env.example.',
+  ].join('\n');
 }
 
 function invokedDirectly(): boolean {
