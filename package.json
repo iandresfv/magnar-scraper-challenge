@@ -20,7 +20,10 @@
     "db:migrate": "tsx src/app/cli/dbMigrate.entry.ts",
     "blob:init": "tsx src/app/cli/blobInit.entry.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "spike": "tsx scripts/spike-fase0.ts"
+    "spike": "tsx scripts/spike-fase0.ts",
+    "start": "tsx src/app/main.ts crawl",
+    "dev": "tsx src/app/main.ts crawl --log-level debug",
+    "demo": "tsx src/app/main.ts crawl --root-start 2024-05-01 --root-end 2024-05-31 --pdf-budget 10"
   },
   "dependencyNotes": {
     "policy": "Runtime dependencies are fixed by the architecture and pinned to an exact version. Any addition must be pure JavaScript and justified here.",
