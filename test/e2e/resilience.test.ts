@@ -351,6 +351,61 @@ describe('the dead letter queue', { timeout: E2E_TIMEOUT }, () => {
   });
 });
 
+// ───────────────────────── dead workers ─────────────────────────────
+
+describe('a worker that never came back', { timeout: E2E_TIMEOUT }, () => {
+  it('gets its job reclaimed mid-run instead of stalling the survivors', async () => {
+    // Exactly the shape of a real incident: a process was killed holding a lease, the lease
+    // expired, and the next run waited for it forever — the loop ends only when nothing is
+    // pending *and* nothing is leased.
+    await crawl();
+    await db.query(
+      `UPDATE juris.job
+         SET status = 'leased', leased_by = 'a-process-that-died',
+             lease_until = now() - interval '1 minute'
+       WHERE id = (SELECT id FROM juris.job WHERE site = $1 AND status = 'done' LIMIT 1)`,
+      [SITE],
+    );
+
+    const lines: string[] = [];
+    const result = await crawlCommand({
+      // `--role worker`, so the reclaim can only come from the loop: the one-shot reap at the
+      // start belongs to the planner, and it is the loop's absence that caused the incident.
+      config: config(['--role', 'worker']),
+      adapter: createSite(SITE, { baseUrl: fake.url }),
+      http: new FetchHttpClient({ defaultTimeoutMs: 5_000 }),
+      db,
+      repos: createRepos(db),
+      queue: queue(),
+      log: (line) => lines.push(line),
+      progressEveryMs: 1_000_000,
+      reapEveryMs: 0,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.OK);
+    expect(lines.join('\n')).toContain('did not come back');
+    const { rows } = await db.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM juris.job WHERE site = $1 AND status = 'leased'`,
+      [SITE],
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
+  });
+
+  it('leaves a lease that has not expired alone', async () => {
+    await crawl();
+    await db.query(
+      `UPDATE juris.job
+         SET status = 'leased', leased_by = 'a-worker-still-working',
+             lease_until = now() + interval '10 minutes'
+       WHERE id = (SELECT id FROM juris.job WHERE site = $1 AND status = 'done' LIMIT 1)`,
+      [SITE],
+    );
+    // Reaping a live lease would hand the same job to two workers at once.
+    expect(await queue().reapExpiredLeases(SITE)).toBe(0);
+    await db.query(`UPDATE juris.job SET status = 'done' WHERE status = 'leased'`);
+  });
+});
+
 // ────────────────────── sessions and site changes ──────────────────────
 
 describe('session loss', { timeout: E2E_TIMEOUT }, () => {

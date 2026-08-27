@@ -66,6 +66,8 @@ export interface CrawlDeps {
   log?: (line: string) => void;
   /** Overrides the wall clock in tests so a progress interval does not slow a suite down. */
   progressEveryMs?: number;
+  /** How often an idle worker reclaims expired leases. Tests shorten it. */
+  reapEveryMs?: number;
   signal?: AbortSignal;
 }
 
@@ -291,6 +293,18 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
   if (config.role === 'worker' || config.role === 'all') {
     const progressEvery = deps.progressEveryMs ?? 30_000;
     let lastProgress = Date.now();
+    /**
+     * How often an idle worker checks for leases whose holder never came back.
+     *
+     * This has to happen *during* the run, not only at startup. A job leased by a process that
+     * was killed sits `leased` until somebody reclaims it, and the loop below only ends when
+     * nothing is pending **and** nothing is leased — so without this, one dead worker leaves the
+     * survivors polling an empty queue forever. Measured, not theorised: it happened on a real
+     * run and cost thirty-seven minutes of a process waiting for a lease from a process that no
+     * longer existed.
+     */
+    const reapEvery = deps.reapEveryMs ?? 15_000;
+    let lastReap = Date.now();
     const retryPolicy = new RetryPolicy();
     /** The previous delay per job, so the decorrelated sequence grows instead of restarting. */
     const previousDelay = new Map<string, number>();
@@ -315,6 +329,16 @@ export async function crawlCommand(deps: CrawlDeps): Promise<CrawlResult> {
         // prevent. So the loop waits while work remains, in either role.
         const remaining = await queue.stats(site);
         if (remaining.pending === 0 && remaining.leased === 0) break;
+
+        if (remaining.leased > 0 && Date.now() - lastReap >= reapEvery) {
+          lastReap = Date.now();
+          const reclaimed = await queue.reapExpiredLeases(site);
+          if (reclaimed > 0) {
+            log(`reclaimed ${String(reclaimed)} job(s) from a worker that did not come back`);
+            continue;
+          }
+        }
+
         await sleep(config.crawl.idlePollMs, deps.signal);
         continue;
       }

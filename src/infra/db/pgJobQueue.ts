@@ -168,7 +168,9 @@ export class PgJobQueue implements JobQueue {
   }
 
   /**
-   * Releases jobs whose holder died. Run by the planner every thirty seconds.
+   * Releases jobs whose holder died. Called once when a run starts, and then by every idle
+   * worker while anything is still leased — a job whose holder was killed has to come back
+   * during the run, not only at the next one.
    *
    * `attempts` is deliberately **not** decremented: a job that repeatedly kills its worker is a
    * job that should eventually reach the dead letter queue rather than loop forever.

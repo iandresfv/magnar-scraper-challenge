@@ -487,7 +487,7 @@ tribunal. `.env` lo carga Node (`node --env-file=.env`); no hay librería de con
 ## 11. Testing
 
 ```bash
-npm test                       # 828 tests
+npm test                       # 830 tests
 npm run lint && npm run typecheck
 ```
 
