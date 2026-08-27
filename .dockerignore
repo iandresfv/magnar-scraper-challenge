@@ -1,0 +1,15 @@
+node_modules/
+dist/
+data/
+exports/
+reports/
+coverage/
+.git/
+.github/
+.env
+.env.docker
+context/
+docs/
+*.log
+*.part
+.DS_Store

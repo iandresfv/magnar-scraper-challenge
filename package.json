@@ -13,7 +13,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "up:infra": "docker compose up -d --wait db blob",
+    "down": "docker compose down",
+    "nuke": "docker compose down -v --remove-orphans"
   },
   "dependencyNotes": {
     "policy": "Runtime dependencies are fixed by the architecture and pinned to an exact version. Any addition must be pure JavaScript and justified here.",

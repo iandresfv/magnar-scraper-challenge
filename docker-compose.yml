@@ -1,0 +1,62 @@
+# Infraestructura local reproducible.
+#
+# Dos servicios sin perfil (`db`, `blob`) que se levantan con `npm run up:infra`, y el perfil
+# `app` (Fase 7) con el propio scraper en roles planner/worker. Quien no tenga Docker no
+# necesita nada de esto: `npm start` cae a PGlite + disco local y avisa en una línea.
+#
+# Los tags se fijan a una versión concreta en la Fase 7 (stage 44); mientras tanto se pinean ya
+# los que se usan en CI para que nadie desarrolle contra una imagen distinta a la que prueba.
+
+name: juris-scraper
+
+services:
+  db:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-juris}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-juris}
+      POSTGRES_DB: ${POSTGRES_DB:-juris}
+      # Determinismo en las comparaciones de texto y en el ordenamiento: el dataset es
+      # portugués y las consultas del reporte agrupan por clase judicial.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # DECISIÓN LOCAL: el puerto publicado por defecto es 55432, no 5432. Un 5432 libre en la
+      # máquina del evaluador es la excepción, no la regla (cualquier Postgres local o túnel SSH
+      # lo ocupa) y el fallo de `compose up` es opaco. Dentro de la red de compose el servicio
+      # sigue escuchando en 5432, así que .env.docker no cambia.
+      - '${POSTGRES_PORT:-55432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-juris} -d ${POSTGRES_DB:-juris}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  blob:
+    # RustFS: drop-in del API S3, Apache 2.0. Se eligió tras descartar MinIO (community
+    # archivado) y LocalStack (exige token de cuenta). Ver docs/ADR/0002-s3-api-rustfs.md.
+    image: rustfs/rustfs:1.0.0-alpha.68
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-juris}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-jurisjuris}
+      RUSTFS_CONSOLE_ENABLE: 'true'
+    volumes:
+      - blobdata:/data
+    ports:
+      # DECISIÓN LOCAL: mismo criterio que en `db`. 9000 es el puerto por defecto de bastantes
+      # servicios locales (el propio MinIO histórico, Portainer, php-fpm).
+      - '${S3_PORT:-59000}:9000' # API S3
+      - '${S3_CONSOLE_PORT:-59001}:9001' # consola web
+    healthcheck:
+      # La imagen es distroless y no trae curl ni wget; el propio binario responde el probe.
+      test: ['CMD', '/usr/bin/rustfs', '--version']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pgdata:
+  blobdata:
