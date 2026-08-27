@@ -1,17 +1,109 @@
 /**
- * Process entry point.
+ * Process entry point and composition root.
  *
- * Responsibility: parse the command line, wire the ports to their adapters and hand control
- * to a command. Today it only reports the version — the composition root grows in Fase 3,
- * when the crawl command and the planner/worker roles land.
+ * This is the only file allowed to know about every layer at once: it reads the configuration,
+ * picks the drivers, builds the adapter, and hands the wired-up pieces to a command. Everything
+ * below it is talking to interfaces.
+ *
+ * Signals are handled here rather than inside the crawl, because "stop soon" is a property of
+ * the process, not of the algorithm. The first `SIGINT` asks the loop to finish its current job
+ * and checkpoint; a second one, from an impatient operator, exits immediately — the state is in
+ * Postgres either way, so the worst case is one job's lease waiting to expire.
  */
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { ExitCode } from '../core/domain/types.js';
+import { createSqlExecutor } from '../infra/db/factory.js';
+import { migrate } from '../infra/db/migrator.js';
+import { createRepos } from '../infra/db/repos/index.js';
+import { PgJobQueue } from '../infra/db/pgJobQueue.js';
+import { FetchHttpClient } from '../infra/http/fetchHttpClient.js';
+import { crawlCommand } from './commands/crawl.js';
+import { ConfigError, resolveConfig, type Config } from './config.js';
+import { createSite } from './registry.js';
 import { resolveVersion } from './version.js';
 
-export function main(): number {
-  process.stdout.write(`juris-scraper ${resolveVersion()}\n`);
-  return 0;
+export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
+  const write = (line: string): void => {
+    process.stdout.write(`${line}\n`);
+  };
+
+  let config: Config;
+  try {
+    config = resolveConfig({ argv });
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      process.stderr.write(`configuration error: ${error.message}\n`);
+      return ExitCode.SANITY_FAILED;
+    }
+    throw error;
+  }
+
+  if (config.command === 'version' || argv.includes('--version')) {
+    write(`juris-scraper ${resolveVersion()}`);
+    return ExitCode.OK;
+  }
+
+  const { executor, fallbackNotice } = await createSqlExecutor({
+    driver: config.db.driver,
+    databaseUrl: config.db.url,
+    dbPath: config.db.path,
+  });
+  if (fallbackNotice !== null) write(fallbackNotice);
+
+  const controller = new AbortController();
+  let interrupts = 0;
+  const onSignal = (): void => {
+    interrupts++;
+    if (interrupts === 1) {
+      write('\nstopping after the current job; press Ctrl+C again to exit immediately');
+      controller.abort();
+    } else {
+      write('\nexiting now; the run is checkpointed in the database');
+      process.exit(ExitCode.INTERRUPTED);
+    }
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+
+  try {
+    if (config.db.autoMigrate) {
+      const { applied } = await migrate(executor);
+      if (applied.length > 0) write(`applied ${String(applied.length)} migration(s)`);
+    }
+
+    const repos = createRepos(executor);
+    const queue = new PgJobQueue(executor, { defaultLeaseMs: config.crawl.leaseMs });
+    const http = new FetchHttpClient();
+    const adapter = createSite(
+      config.site,
+      config.baseUrl === undefined ? {} : { baseUrl: config.baseUrl },
+    );
+
+    switch (config.command) {
+      case 'crawl': {
+        const result = await crawlCommand({
+          config,
+          adapter,
+          http,
+          db: executor,
+          repos,
+          queue,
+          signal: controller.signal,
+          log: write,
+        });
+        return result.exitCode;
+      }
+      default: {
+        process.stderr.write(`unknown command "${config.command}". Known commands: crawl\n`);
+        return ExitCode.SANITY_FAILED;
+      }
+    }
+  } finally {
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+    await executor.close();
+  }
 }
 
 function invokedDirectly(): boolean {
@@ -25,5 +117,5 @@ function invokedDirectly(): boolean {
 }
 
 if (invokedDirectly()) {
-  process.exitCode = main();
+  process.exitCode = await main();
 }
