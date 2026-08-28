@@ -61,6 +61,35 @@ jobs 83 done · 555 pending · 0 dead · cases 560 (15 detailed) · pdfs 0/97 ·
 Al terminar, `npm run verify` (11 comprobaciones), `npm run report` (los reportes de `reports/`) y
 `npm run export -- --format csv` (un archivo por entidad).
 
+### Dónde queda todo, y cómo mirarlo
+
+`npm run up` publica dos servicios en puertos **no estándar** a propósito: un 5432 o un 9000 libres
+en la máquina de quien evalúa son la excepción, y el fallo de `compose up` es opaco.
+
+|                      | Dónde                                             | Cómo entrar                                                                                                               |
+| -------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Postgres             | `localhost:55432`                                 | `docker compose exec db psql -U juris -d juris`, o `postgres://juris:juris@localhost:55432/juris` desde cualquier cliente |
+| Object storage (PDF) | `localhost:59000` API · `localhost:59001` consola | consola web con `juris` / `jurisjuris`, bucket `juris`                                                                    |
+| Reportes             | `reports/`                                        | `npm run report` los reescribe                                                                                            |
+| Volcados             | `exports/`                                        | `npm run export -- --format csv --out exports/`                                                                           |
+
+Todo vive en el esquema `juris`. Cuatro consultas para empezar:
+
+```sql
+\dt juris.*                                     -- quince tablas: datos, cobertura, cola, métricas
+
+select estado, count(*) from juris.case_record group by 1;
+
+-- El árbol de cobertura: por qué existe cada hoja, y con qué aritmética
+select id, status, observed_rows, cap_seen from juris.partition order by data_ini limit 20;
+
+-- Lo que se abandonó, y por qué
+select kind, failure_class, count(*) from juris.job where status='dead' group by 1, 2;
+```
+
+`npm run healthcheck` responde si la base está donde se cree que está. `npm run down` apaga los
+contenedores conservando los datos; `npm run nuke` los borra con sus volúmenes.
+
 > **Sobre el alcance del run publicado.** El run de evidencia que hay en `reports/` cubre
 > **mayo de 2024**, no 1990→hoy. El rango raíz es un parámetro (`--root-start` / `--root-end`; el
 > default del código es `1990-01-01` → hoy+1año), no un límite del motor. Un mes basta como
@@ -291,6 +320,26 @@ br-trf5/2024/0000007-07.1985.8.20.0124/0000007-07.1985.8.20.0124__relatorio.pdf
 Cada archivo se valida **antes** de subirse: cabecera `%PDF-`, marca `%%EOF`, tamaño mínimo. Un
 HTML de sesión caída no se almacena como si fuera un documento; se clasifica `NOT_PDF`, se renueva
 la sesión y se reintenta una vez.
+
+### Cómo mirar los PDF que bajó
+
+Con el driver por defecto están en RustFS, no en el disco:
+
+- **Consola web**: <http://localhost:59001>, usuario `juris`, clave `jurisjuris`, bucket `juris`.
+- **Desde la base**, con su ubicación, tamaño y hash:
+  ```sql
+  select storage_uri, bytes, sha256 from juris.blob where estado = 'STORED' limit 5;
+  ```
+- **Con cualquier cliente S3** apuntando a `http://localhost:59000` con esas credenciales y
+  path-style activado.
+
+Si lo que se quiere son archivos sueltos que se abran con doble clic, la misma jerarquía se
+escribe en disco cambiando de driver:
+
+```bash
+BLOB_DRIVER=fs npm start -- --root-start 2024-05-01 --root-end 2024-05-31 --pdf-budget 20
+open data/blobs/br-trf5/2024/
+```
 
 `--pdf-budget` es **por ejecución del proceso** y se reserva, no se lee: cada job de detalle pide
 su parte del presupuesto y recibe lo que queda, así que `--pdf-budget 12` descarga 12 y no 386.
