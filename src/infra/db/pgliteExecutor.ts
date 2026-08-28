@@ -12,6 +12,7 @@
  * throttle tests are the ones that require `TEST_DATABASE_URL`. In this mode the `all` role
  * uses in-process concurrency.
  */
+import { mkdirSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { btree_gist } from '@electric-sql/pglite/contrib/btree_gist';
 import type {
@@ -72,6 +73,11 @@ export class PgliteExecutor implements SqlExecutor {
   }
 
   static async create(options: PgliteExecutorOptions = {}): Promise<PgliteExecutor> {
+    // PGlite's node filesystem creates only the leaf directory, so a fresh clone — where
+    // `data/` does not exist yet — dies with ENOENT before the first query. The no-Docker path
+    // is the one an evaluator tries first; it cannot require a mkdir the README never mentions.
+    if (options.dataDir !== undefined) mkdirSync(options.dataDir, { recursive: true });
+
     const db = await PGlite.create({
       ...(options.dataDir !== undefined ? { dataDir: options.dataDir } : {}),
       extensions: { btree_gist },
