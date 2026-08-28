@@ -7,7 +7,7 @@ dos de ellos acota cualquier regresión a un módulo.
 ## v1.0.0 — 2026-08-27
 
 Primera versión completa: motor multi-sitio, un tribunal real implementado (TRF5), un tribunal
-falso que pasa el mismo contrato, 830 tests y un run de evidencia publicado en [`reports/`](reports/).
+falso que pasa el mismo contrato, 837 tests y un run de evidencia publicado en [`reports/`](reports/).
 
 ### Motor de cobertura
 
@@ -57,7 +57,7 @@ examples`; `build(docker): add multi-stage dockerfile and app profile`.
 
 ### Correcciones de la propia implementación
 
-Quince, todas nacidas de un fallo observado y con test de regresión. Las que más enseñan:
+Dieciocho, todas nacidas de un fallo observado y con test de regresión. Las que más enseñan:
 
 - `fix(http): decode latin1 by definition, not by encoding label` — `TextDecoder('iso-8859-1')`
   es un alias de windows-1252, y el resultado difería entre macOS y CI.
@@ -69,6 +69,12 @@ Quince, todas nacidas de un fallo observado y con test de regresión. Las que m�
   dentro de un `try/finally` cerraba la base antes de adoptarla.
 - `fix(report): count the cases the site could not render` — el total de expedientes bajaba a
   medida que avanzaba la corrida.
+- Los tres primeros treinta segundos, encontrados probando el proyecto en una máquina limpia en
+  vez de dándolos por buenos: `fix(cli): load .env from the process, as the readme promises` —los
+  scripts corren por `tsx`, así que el archivo que el README manda copiar no lo leía nadie—,
+  `fix(config): read an empty environment variable as unset` —`.env.example` deja claves en blanco
+  a propósito y se rechazaban como fecha inválida— y `fix(db): create the pglite data directory
+before opening it` —el camino sin Docker moría con `ENOENT` en un clon recién hecho.
 - `fix(crawl): keep a planner-only run unfinished`, `fix(db): re-derive document formatting when
 reading a party`, `fix(engine): share one crawl across the completeness assertions`,
   `fix(core): detect the windows-1252 rendering of mojibake too`, `fix(docs)` ×2, `fix(ci)` ×2,
