@@ -30,6 +30,7 @@ import { reportCommand } from './commands/report.js';
 import { exportCommand, type ExportFormat } from './commands/export.js';
 import { healthcheckCommand } from './commands/healthcheck.js';
 import { ConfigError, resolveConfig, type Config } from './config.js';
+import { loadEnvFile } from './env.js';
 import { createSite } from './registry.js';
 import type { SiteAdapter } from '../core/ports/siteAdapter.js';
 import { resolveVersion } from './version.js';
@@ -38,6 +39,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   const write = (line: string): void => {
     process.stdout.write(`${line}\n`);
   };
+
+  // Before anything reads the environment. Values already set in it are left alone.
+  loadEnvFile();
 
   let config: Config;
   try {

@@ -415,7 +415,9 @@ Lo que se puede intercambiar sin tocar el motor:
 
 Flags > variables de entorno > defaults. Todo se valida al arrancar: una corrida que falla a la
 hora por un valor mal escrito desperdició una hora de alguien y una hora de capacidad de un
-tribunal. `.env` lo carga Node (`node --env-file=.env`); no hay librería de configuración.
+tribunal. `.env` lo carga el propio proceso al arrancar —mismo comportamiento que `node --env-file`, sin
+exigir Node 20.12— y **lo que ya esté en el entorno gana**: una variable exportada en la shell o
+inyectada por compose es más específica que un archivo. No hay librería de configuración.
 
 ### Base de datos
 
@@ -488,7 +490,7 @@ tribunal. `.env` lo carga Node (`node --env-file=.env`); no hay librería de con
 ## 11. Testing
 
 ```bash
-npm test                       # 830 tests
+npm test                       # 837 tests
 npm run lint && npm run typecheck
 ```
 
