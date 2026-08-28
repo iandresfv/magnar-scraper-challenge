@@ -79,7 +79,12 @@ export interface ResolveConfigInput {
 }
 
 export function resolveConfig(input: ResolveConfigInput = {}): Config {
-  const env = input.env ?? process.env;
+  // An empty value means "not set", everywhere.
+  //
+  // `.env.example` ships several keys blank on purpose — `ROOT_END=` documents that the default
+  // is computed, `METRICS_PORT=` that the endpoint is off. Copying that file and running was a
+  // configuration error until this line existed, which made the README's first instruction wrong.
+  const env = compact(input.env ?? process.env);
   const now = input.now ?? ((): Date => new Date());
 
   const { values, positionals } = parseArgs({
@@ -247,4 +252,13 @@ function budget(value: string): number | null {
     );
   }
   return parsed;
+}
+
+/** Drops the keys whose value is empty or whitespace, so a blank line in `.env` reads as absent. */
+function compact(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined && value.trim() !== '') out[key] = value;
+  }
+  return out;
 }
